@@ -23,14 +23,21 @@ create table if not exists locations (
   id text primary key,
   label text not null,
   "fullName" text not null,
+  "fullNameEn" text,
   category text not null,
   description text not null,
+  "descriptionEn" text,
   "shortIntro" text,
+  "shortIntroEn" text,
   "imageUrl" text,
+  "googleMapsUrl" text,
   neighborhood text,
+  "neighborhoodEn" text,
   "visitDuration" text,
   "bestFor" text,
+  "bestForEn" text,
   highlights text[],
+  "highlightsEn" text[],
   x integer not null,
   y integer not null
 );
@@ -68,6 +75,24 @@ create policy "admin_only" on routes for all to authenticated
 create policy "admin_only" on preset_selections for all to authenticated
   using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
   with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+```
+
+---
+
+## Bước 2b: Nâng cấp schema (nếu đã tạo bảng từ trước)
+
+> Bỏ qua bước này nếu vừa tạo bảng ở Bước 2.
+
+Nếu bảng `locations` đã tồn tại và thiếu các cột tiếng Anh / Google Maps, chạy SQL sau:
+
+```sql
+alter table locations add column if not exists "fullNameEn" text;
+alter table locations add column if not exists "descriptionEn" text;
+alter table locations add column if not exists "shortIntroEn" text;
+alter table locations add column if not exists "googleMapsUrl" text;
+alter table locations add column if not exists "neighborhoodEn" text;
+alter table locations add column if not exists "bestForEn" text;
+alter table locations add column if not exists "highlightsEn" text[];
 ```
 
 ---

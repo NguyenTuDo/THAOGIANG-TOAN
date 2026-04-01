@@ -1,44 +1,31 @@
 import { AppMode, GraphData, PresetSelectionMap, Route, TouristLocation } from '../types';
-import { INITIAL_GRAPH_DATA, PRESET_SELECTIONS } from '../data/hcmcLocations';
 import { getSupabase, hasSupabaseConfig } from './supabase';
 
 const STORAGE_KEYS = {
   locations: 'tourist.locations',
   routes: 'tourist.routes',
   presets: 'tourist.presets',
+  draft: 'tourist.guidebook.draft',
 };
 
-const DEFAULT_PRESETS: PresetSelectionMap = PRESET_SELECTIONS;
+const EMPTY_GRAPH: GraphData = { locations: [], routes: [] };
 
-function cloneGraphData(graphData: GraphData): GraphData {
-  return {
-    locations: graphData.locations.map(location => ({
-      ...location,
-      highlights: location.highlights ? [...location.highlights] : undefined,
-    })),
-    routes: graphData.routes.map(route => ({ ...route })),
-  };
-}
-
-function clonePresets(presets: PresetSelectionMap): PresetSelectionMap {
-  return {
-    cycle: { ...presets.cycle, ids: [...presets.cycle.ids] },
-    path: { ...presets.path, ids: [...presets.path.ids] },
-    subset: { ...presets.subset, ids: [...presets.subset.ids] },
-  };
-}
+const EMPTY_PRESETS: PresetSelectionMap = {
+  cycle:  { ids: [], label: '', desc: '' },
+  path:   { ids: [], label: '', desc: '' },
+  subset: { ids: [], label: '', desc: '' },
+};
 
 function readLocalGraphData(): GraphData {
-  const fallback = cloneGraphData(INITIAL_GRAPH_DATA);
   try {
     const rawLocations = localStorage.getItem(STORAGE_KEYS.locations);
     const rawRoutes = localStorage.getItem(STORAGE_KEYS.routes);
     return {
-      locations: rawLocations ? JSON.parse(rawLocations) as TouristLocation[] : fallback.locations,
-      routes: rawRoutes ? JSON.parse(rawRoutes) as Route[] : fallback.routes,
+      locations: rawLocations ? JSON.parse(rawLocations) as TouristLocation[] : [],
+      routes: rawRoutes ? JSON.parse(rawRoutes) as Route[] : [],
     };
   } catch {
-    return fallback;
+    return { ...EMPTY_GRAPH };
   }
 }
 
@@ -48,12 +35,11 @@ function writeLocalGraphData(graphData: GraphData) {
 }
 
 function readLocalPresets(): PresetSelectionMap {
-  const fallback = clonePresets(DEFAULT_PRESETS);
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.presets);
-    return raw ? JSON.parse(raw) as PresetSelectionMap : fallback;
+    return raw ? JSON.parse(raw) as PresetSelectionMap : { ...EMPTY_PRESETS };
   } catch {
-    return fallback;
+    return { ...EMPTY_PRESETS };
   }
 }
 
@@ -78,10 +64,20 @@ export async function loadGraphData(): Promise<GraphData> {
     const routes = (routeResult.data as Route[])
       .sort((a, b) => a.id.localeCompare(b.id));
 
+    writeLocalGraphData({ locations, routes });
     return { locations, routes };
   } catch {
     return readLocalGraphData();
   }
+}
+
+// Strip undefined values so Supabase doesn't reject with 400
+function toDbLocation(location: TouristLocation): Record<string, unknown> {
+  const record: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(location)) {
+    if (value !== undefined) record[key] = value;
+  }
+  return record;
 }
 
 export async function saveLocation(location: TouristLocation): Promise<void> {
@@ -94,7 +90,7 @@ export async function saveLocation(location: TouristLocation): Promise<void> {
   const supabase = getSupabase();
   if (!supabase || !hasSupabaseConfig()) return;
 
-  const { error } = await supabase.from('locations').upsert(location);
+  const { error } = await supabase.from('locations').upsert(toDbLocation(location));
   if (error) throw error;
 }
 
@@ -146,12 +142,14 @@ export async function loadPresets(): Promise<PresetSelectionMap> {
   try {
     const { data, error } = await supabase.from('preset_selections').select('*');
     if (error) throw error;
-    if (!data || data.length === 0) return readLocalPresets();
 
-    const presets = clonePresets(DEFAULT_PRESETS);
-    (data as Array<{ mode: AppMode; ids: string[]; label: string; desc: string }>).forEach(row => {
-      presets[row.mode] = { ids: row.ids, label: row.label, desc: row.desc };
-    });
+    const presets: PresetSelectionMap = { ...EMPTY_PRESETS };
+    if (data && data.length > 0) {
+      (data as Array<{ mode: AppMode; ids: string[]; label: string; desc: string }>).forEach(row => {
+        presets[row.mode] = { ids: row.ids, label: row.label, desc: row.desc };
+      });
+      writeLocalPresets(presets);
+    }
     return presets;
   } catch {
     return readLocalPresets();
@@ -168,4 +166,27 @@ export async function savePreset(mode: AppMode, preset: PresetSelectionMap[AppMo
 
   const { error } = await supabase.from('preset_selections').upsert({ mode, ...preset });
   if (error) throw error;
+}
+
+export interface GuidebookDraft {
+  selectedIds: string[];
+  endId: string | null;
+  appMode: AppMode;
+}
+
+export function readLocalDraft(): GuidebookDraft | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.draft);
+    return raw ? (JSON.parse(raw) as GuidebookDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeLocalDraft(draft: GuidebookDraft): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(draft));
+  } catch {
+    // ignore storage errors
+  }
 }

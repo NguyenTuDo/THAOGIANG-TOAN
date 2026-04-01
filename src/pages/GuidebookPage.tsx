@@ -1,14 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Languages, MapPinned } from 'lucide-react';
 import { DestinationSelector } from '../components/DestinationSelector';
 import { GraphView } from '../components/GraphView';
 import { findShortestHamiltonianCycle } from '../algorithms/hamiltonianCycle';
 import { findShortestHamiltonianPath } from '../algorithms/hamiltonianPath';
 import { findShortestSubsetRoute } from '../algorithms/subsetRoute';
-import { loadGraphData, loadPresets } from '../lib/dataStore';
+import { loadGraphData, loadPresets, readLocalDraft, writeLocalDraft } from '../lib/dataStore';
 import { useLang } from '../contexts/LanguageContext';
 import { AppMode, AlgorithmResult, GraphData, PresetSelectionMap } from '../types';
-import { INITIAL_GRAPH_DATA, PRESET_SELECTIONS } from '../data/hcmcLocations';
 
 const MODES: { id: AppMode; label: string; labelEn: string; desc: string; descEn: string; activeClass: string }[] = [
   {
@@ -41,27 +40,26 @@ type AppView = 'selector' | 'graph';
 
 export function GuidebookPage() {
   const { lang, setLang, t } = useLang();
-  const [graphData, setGraphData] = useState<GraphData>(INITIAL_GRAPH_DATA);
-  const [presets, setPresets] = useState<PresetSelectionMap>(PRESET_SELECTIONS);
+  const [graphData, setGraphData] = useState<GraphData>({ locations: [], routes: [] });
+  const [presets, setPresets] = useState<PresetSelectionMap>({
+    cycle:  { ids: [], label: '', desc: '' },
+    path:   { ids: [], label: '', desc: '' },
+    subset: { ids: [], label: '', desc: '' },
+  });
   const [loadingData, setLoadingData] = useState(true);
-  const [usingFallbackData, setUsingFallbackData] = useState(false);
-  const [appMode, setAppMode] = useState<AppMode>('cycle');
+  const [appMode, setAppMode] = useState<AppMode>(() => readLocalDraft()?.appMode ?? 'cycle');
   const [appView, setAppView] = useState<AppView>('selector');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [endId, setEndId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => readLocalDraft()?.selectedIds ?? []);
+  const [endId, setEndId] = useState<string | null>(() => readLocalDraft()?.endId ?? null);
   const [result, setResult] = useState<AlgorithmResult | null>(null);
+  const isMountRef = useRef(true);
 
   const refreshData = useCallback(async () => {
     setLoadingData(true);
     try {
       const [graph, nextPresets] = await Promise.all([loadGraphData(), loadPresets()]);
-      const hasRemoteLocations = graph.locations.length > 0;
-      const hasRemoteRoutes = graph.routes.length > 0;
-      const hasRemotePresets = Object.values(nextPresets).some(preset => preset.ids.length > 0);
-
-      setGraphData(hasRemoteLocations && hasRemoteRoutes ? graph : INITIAL_GRAPH_DATA);
-      setPresets(hasRemotePresets ? nextPresets : PRESET_SELECTIONS);
-      setUsingFallbackData(!(hasRemoteLocations && hasRemoteRoutes));
+      setGraphData(graph);
+      setPresets(nextPresets);
     } finally {
       setLoadingData(false);
     }
@@ -72,11 +70,19 @@ export function GuidebookPage() {
   }, [refreshData]);
 
   useEffect(() => {
+    if (isMountRef.current) {
+      isMountRef.current = false;
+      return;
+    }
     setSelectedIds([]);
     setEndId(null);
     setResult(null);
     setAppView('selector');
   }, [appMode]);
+
+  useEffect(() => {
+    writeLocalDraft({ selectedIds, endId, appMode });
+  }, [selectedIds, endId, appMode]);
 
   const MAX: Record<AppMode, number> = { cycle: 5, path: 5, subset: 99 };
 
@@ -205,15 +211,6 @@ export function GuidebookPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {usingFallbackData && (
-              <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-800">
-                {t(
-                  'Supabase hiện chưa có dữ liệu nên trang đang dùng bộ dữ liệu mẫu để thầy thao tác và trình bày ngay. Khi đăng nhập admin và nạp dữ liệu hệ thống, nội dung thật sẽ thay thế tự động.',
-                  'Supabase is currently empty, so the page is using the sample dataset for immediate demos. Once an admin signs in and seeds the system data, the live content will replace it automatically.',
-                )}
-              </div>
-            )}
-
             <section className="overflow-hidden rounded-[34px] border border-[#ded5c7] bg-white/70 shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
               {appView === 'selector' ? (
                 <DestinationSelector

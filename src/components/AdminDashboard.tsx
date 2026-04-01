@@ -98,12 +98,13 @@ export function AdminDashboard({
 
   const showError = (error: unknown) => {
     const rawMessage = error instanceof Error ? error.message : 'Không thể lưu dữ liệu.';
-    const friendlyMessage =
-      rawMessage.includes('googleMapsUrl')
-        ? 'Supabase của thầy chưa có cột Google Maps. Hãy chạy SQL: alter table locations add column if not exists "googleMapsUrl" text;'
-        : rawMessage.includes('fullNameEn') || rawMessage.includes('descriptionEn') || rawMessage.includes('shortIntroEn')
-          ? 'Supabase của thầy đang thiếu các cột tiếng Anh của bảng locations. Cần bổ sung các cột EN trước khi lưu.'
-          : rawMessage;
+    const missingColumnKeywords = [
+      'googleMapsUrl', 'fullNameEn', 'descriptionEn', 'shortIntroEn',
+      'neighborhoodEn', 'bestForEn', 'highlightsEn',
+    ];
+    const friendlyMessage = missingColumnKeywords.some(col => rawMessage.includes(col))
+      ? 'Supabase đang thiếu cột. Vào SUPABASE_SETUP.md → Bước 2b và chạy SQL nâng cấp schema.'
+      : rawMessage;
     setStatusTone('error');
     setStatus(friendlyMessage);
   };
