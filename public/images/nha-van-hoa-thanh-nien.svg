@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#63223f"/>
+      <stop offset="55%" stop-color="#a4456c"/>
+      <stop offset="100%" stop-color="#e2b586"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <circle cx="300" cy="220" r="90" fill="rgba(255,255,255,0.12)"/>
+  <circle cx="950" cy="260" r="120" fill="rgba(255,255,255,0.08)"/>
+  <rect x="220" y="330" width="760" height="270" rx="30" fill="rgba(255,255,255,0.14)"/>
+  <path d="M260 560 C380 420, 530 440, 610 520 S860 630, 950 470" fill="none" stroke="#f4e8d7" stroke-width="18" stroke-linecap="round"/>
+  <text x="90" y="760" fill="#ffffff" font-size="78" font-family="Georgia, serif" font-weight="700">Nha Van Hoa Thanh Nien</text>
+  <text x="92" y="820" fill="rgba(255,255,255,0.85)" font-size="30" font-family="Segoe UI, sans-serif">Diem check-in tre trung, de noi sang cum Duc Ba va duong sach</text>
+</svg>
+

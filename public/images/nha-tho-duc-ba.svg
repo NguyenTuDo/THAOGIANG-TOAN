@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#143a60"/>
+      <stop offset="60%" stop-color="#3d77a1"/>
+      <stop offset="100%" stop-color="#ddb37a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <path d="M420 620 L420 270 L520 210 L520 620 Z" fill="rgba(255,255,255,0.18)"/>
+  <path d="M680 620 L680 270 L780 210 L780 620 Z" fill="rgba(255,255,255,0.18)"/>
+  <rect x="500" y="350" width="200" height="270" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="600" cy="280" r="45" fill="rgba(255,255,255,0.2)"/>
+  <text x="90" y="760" fill="#ffffff" font-size="88" font-family="Georgia, serif" font-weight="700">Nha Tho Duc Ba</text>
+  <text x="92" y="820" fill="rgba(255,255,255,0.85)" font-size="32" font-family="Segoe UI, sans-serif">Bieu tuong kien truc cho khach lan dau den tham khu trung tam</text>
+</svg>
+
