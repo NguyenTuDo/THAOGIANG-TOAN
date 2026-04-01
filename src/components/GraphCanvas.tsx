@@ -1,10 +1,19 @@
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import * as d3 from 'd3';
 import { Compass, RotateCcw, Search, Plus, Minus } from 'lucide-react';
+import { haversineKm } from '../lib/geo';
 import {
   TouristLocation, Route, AppMode, UIMode,
   AlgorithmStep, SelectedElement,
 } from '../types';
+
+interface DistancePopup {
+  fromId: string;
+  toId: string;
+  suggestedKm: number | null;
+  screenX: number;
+  screenY: number;
+}
 
 interface GraphCanvasProps {
   locations: TouristLocation[];
@@ -26,7 +35,7 @@ interface GraphCanvasProps {
   // Edge drawing in edit mode
   edgeStart: string | null;
   onEdgeStartSet: (id: string | null) => void;
-  onAddRoute: (from: string, to: string) => void;
+  onAddRoute: (from: string, to: string, distanceKm: number) => void;
 }
 
 // Category color map
@@ -116,6 +125,27 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   const [tooltip, setTooltip] = useState<{ x: number; y: number; loc: TouristLocation } | null>(null);
   const [rotationDeg, setRotationDeg] = useState(0);
 
+  // Edge drag state
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [isDraggingEdge, setIsDraggingEdge] = useState(false);
+  const [isDraggingNode, setIsDraggingNode] = useState(false);
+  const [dragTarget, setDragTarget] = useState<string | null>(null);
+  const [distancePopup, setDistancePopup] = useState<DistancePopup | null>(null);
+  const [popupDistance, setPopupDistance] = useState('');
+
+  // Refs for latest values (used inside stable event-handler closures)
+  const dragSourceRef = useRef<string | null>(null);
+  const isDraggingRef = useRef(false);
+  const uiModeRef = useRef(uiMode);
+  uiModeRef.current = uiMode;
+  const rotationDegRef = useRef(rotationDeg);
+  rotationDegRef.current = rotationDeg;
+  const locationsRef = useRef(locations);
+  locationsRef.current = locations;
+  const routesRef = useRef(routes);
+  routesRef.current = routes;
+
   const highlightPath = highlightedPaths[activePathIndex] ?? [];
 
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
@@ -125,6 +155,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     const y = locations.reduce((sum, loc) => sum + loc.y, 0) / locations.length;
     return { x, y };
   }, [locations]);
+
+  const graphCenterRef = useRef(graphCenter);
+  graphCenterRef.current = graphCenter;
 
   const fitToView = useCallback((locs: TouristLocation[]) => {
     const svgEl = svgRef.current;
@@ -151,6 +184,113 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     );
   }, []);
 
+  // Convert screen coordinates → graph (rotation-group) coordinates
+  const screenToGraphSpace = useCallback((clientX: number, clientY: number): { x: number; y: number } => {
+    const svgEl = svgRef.current!;
+    const rect = svgEl.getBoundingClientRect();
+    const transform = d3.zoomTransform(svgEl);
+    // Screen → zoom-group space
+    const zx = (clientX - rect.left - transform.x) / transform.k;
+    const zy = (clientY - rect.top - transform.y) / transform.k;
+    // Apply inverse rotation around graphCenter
+    const θ = -(rotationDegRef.current * Math.PI) / 180;
+    const cx = graphCenterRef.current.x;
+    const cy = graphCenterRef.current.y;
+    const dx = zx - cx;
+    const dy = zy - cy;
+    return {
+      x: cx + dx * Math.cos(θ) - dy * Math.sin(θ),
+      y: cy + dx * Math.sin(θ) + dy * Math.cos(θ),
+    };
+  }, []); // Stable — reads from refs
+
+  // Start an edge-draw drag (used by handle mousedown and Shift+click)
+  const startEdgeDrag = useCallback((sourceId: string) => {
+    dragSourceRef.current = sourceId;
+    isDraggingRef.current = true;
+    setIsDraggingEdge(true);
+    onEdgeStartSet(sourceId);
+
+    const onDragMove = (e: MouseEvent) => {
+      const pos = screenToGraphSpace(e.clientX, e.clientY);
+      setMousePos(pos);
+      const HIT = 24;
+      const target = locationsRef.current.find(l =>
+        l.id !== dragSourceRef.current &&
+        Math.hypot(l.x - pos.x, l.y - pos.y) < HIT
+      );
+      setDragTarget(target?.id ?? null);
+    };
+
+    const onDragEnd = (e: MouseEvent) => {
+      window.removeEventListener('mousemove', onDragMove);
+      window.removeEventListener('mouseup', onDragEnd);
+      isDraggingRef.current = false;
+      setIsDraggingEdge(false);
+      setMousePos(null);
+      setDragTarget(null);
+
+      const src = dragSourceRef.current;
+      dragSourceRef.current = null;
+      onEdgeStartSet(null);
+
+      if (!src) return;
+
+      // Re-compute target from final mouse position
+      const pos = screenToGraphSpace(e.clientX, e.clientY);
+      const HIT = 24;
+      const target = locationsRef.current.find(l =>
+        l.id !== src &&
+        Math.hypot(l.x - pos.x, l.y - pos.y) < HIT
+      );
+
+      if (!target) return;
+
+      // Prevent duplicate edges
+      const exists = routesRef.current.some(r =>
+        (r.from === src && r.to === target.id) ||
+        (r.from === target.id && r.to === src)
+      );
+      if (exists) return;
+
+      // Compute Haversine suggestion
+      const fromLoc = locationsRef.current.find(l => l.id === src)!;
+      const suggested =
+        fromLoc.lat && fromLoc.lng && target.lat && target.lng
+          ? haversineKm(fromLoc.lat, fromLoc.lng, target.lat, target.lng)
+          : null;
+
+      setDistancePopup({
+        fromId: src,
+        toId: target.id,
+        suggestedKm: suggested,
+        screenX: e.clientX,
+        screenY: e.clientY,
+      });
+      setPopupDistance(suggested ? suggested.toFixed(1) : '');
+    };
+
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', onDragEnd);
+  }, [onEdgeStartSet, screenToGraphSpace]);
+
+  // Track mouse when edgeStart is set via Shift+click (not drag) for preview line
+  useEffect(() => {
+    if (!edgeStart || isDraggingEdge) return;
+    const onMove = (e: MouseEvent) => {
+      setMousePos(screenToGraphSpace(e.clientX, e.clientY));
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [edgeStart, isDraggingEdge, screenToGraphSpace]);
+
+  // Cleanup drag listeners on unmount
+  useEffect(() => {
+    return () => {
+      isDraggingRef.current = false;
+    };
+  }, []);
+
   // Setup D3 zoom
   useEffect(() => {
     const svgEl = svgRef.current!;
@@ -160,12 +300,26 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.15, 4])
+      .filter(event => {
+        // Always allow mouse wheel for zooming
+        if (event.type === 'wheel') return true;
+        // In edit mode: only activate zoom/pan when clicking the background, not nodes/edges
+        // This prevents D3 from calling preventDefault() on pointerdown over nodes,
+        // which would suppress the mousedown event that drives our node-drag logic.
+        if (uiModeRef.current === 'edit') {
+          const target = event.target as SVGElement;
+          return (
+            target.tagName === 'svg' ||
+            target.classList.contains('canvas-bg')
+          );
+        }
+        return !event.button;
+      })
       .on('zoom', e => g.attr('transform', e.transform.toString()));
 
     zoomRef.current = zoom;
     svg.call(zoom);
 
-    // Auto-fit after paint using rAF to ensure DOM has real dimensions
     const rafId = requestAnimationFrame(() => {
       fitToView(locations);
     });
@@ -180,10 +334,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   const handleSvgDoubleClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (uiMode !== 'edit') return;
     const target = e.target as SVGElement;
-    // Only trigger on background, not on nodes/edges
     if (target.tagName === 'svg' || target.classList.contains('canvas-bg')) {
       const rect = svgRef.current!.getBoundingClientRect();
-      // Account for zoom/pan transform
       const transform = d3.zoomTransform(svgRef.current!);
       const x = (e.clientX - rect.left - transform.x) / transform.k;
       const y = (e.clientY - rect.top - transform.y) / transform.k;
@@ -193,53 +345,104 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
   const handleNodeClick = useCallback((e: React.MouseEvent, loc: TouristLocation) => {
     e.stopPropagation();
-    if (uiMode === 'edit' && edgeStart !== null) {
-      // Complete edge drawing
+    // Shift+click path: user clicked a target node after setting edgeStart
+    if (uiMode === 'edit' && edgeStart !== null && !isDraggingEdge) {
       if (edgeStart !== loc.id) {
-        onAddRoute(edgeStart, loc.id);
+        const exists = routesRef.current.some(r =>
+          (r.from === edgeStart && r.to === loc.id) ||
+          (r.from === loc.id && r.to === edgeStart)
+        );
+        if (!exists) {
+          const fromLoc = locationsRef.current.find(l => l.id === edgeStart)!;
+          const suggested =
+            fromLoc.lat && fromLoc.lng && loc.lat && loc.lng
+              ? haversineKm(fromLoc.lat, fromLoc.lng, loc.lat, loc.lng)
+              : null;
+          setDistancePopup({
+            fromId: edgeStart,
+            toId: loc.id,
+            suggestedKm: suggested,
+            screenX: e.clientX,
+            screenY: e.clientY,
+          });
+          setPopupDistance(suggested ? suggested.toFixed(1) : '');
+        }
       }
       onEdgeStartSet(null);
+      setMousePos(null);
       return;
     }
     onLocationClick(loc.id);
     onSelectElement({ type: 'location', id: loc.id });
-  }, [uiMode, edgeStart, onAddRoute, onEdgeStartSet, onLocationClick, onSelectElement]);
+  }, [uiMode, edgeStart, isDraggingEdge, onEdgeStartSet, onLocationClick, onSelectElement]);
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, loc: TouristLocation) => {
     if (uiMode !== 'edit') return;
     if (e.shiftKey) {
-      // Start edge drawing
+      // Shift+click starts edge drawing via drag mechanism
       e.stopPropagation();
-      onEdgeStartSet(loc.id);
+      startEdgeDrag(loc.id);
       return;
     }
 
-    // Drag node
     e.stopPropagation();
-    const startX = e.clientX;
-    const startY = e.clientY;
+
+    // Snapshot raw screen position and original graph position at mousedown.
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
     const origX = loc.x;
     const origY = loc.y;
 
+    setIsDraggingNode(true);
+
     const onMove = (ev: MouseEvent) => {
+      // Convert screen-space delta → graph-space delta.
+      // Using deltas avoids the graphCenter dependency entirely:
+      // the rotation pivot (graphCenter) cancels out when subtracting two points
+      // in the same coordinate system, so shifting graphCenter during drag
+      // does NOT affect the result.
       const transform = d3.zoomTransform(svgRef.current!);
-      const dx = (ev.clientX - startX) / transform.k;
-      const dy = (ev.clientY - startY) / transform.k;
+      const dZoomX = (ev.clientX - startClientX) / transform.k;
+      const dZoomY = (ev.clientY - startClientY) / transform.k;
+      // Inverse-rotate the zoom-group delta to get graph-space delta.
+      // α = rotationDeg (positive), inverse rotation = rotate by -α.
+      const α = (rotationDegRef.current * Math.PI) / 180;
+      const dx = dZoomX * Math.cos(α) + dZoomY * Math.sin(α);
+      const dy = -dZoomX * Math.sin(α) + dZoomY * Math.cos(α);
       onLocationDrag(loc.id, origX + dx, origY + dy);
     };
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      setIsDraggingNode(false);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [uiMode, onEdgeStartSet, onLocationDrag]);
+  }, [uiMode, startEdgeDrag, onLocationDrag]);
+
+  const handleHandleMouseDown = useCallback((e: React.MouseEvent, loc: TouristLocation) => {
+    e.stopPropagation();
+    e.preventDefault();
+    startEdgeDrag(loc.id);
+  }, [startEdgeDrag]);
 
   const handleEdgeClick = useCallback((e: React.MouseEvent, route: Route) => {
     e.stopPropagation();
     onRouteClick(route.id);
     onSelectElement({ type: 'route', id: route.id });
   }, [onRouteClick, onSelectElement]);
+
+  const handlePopupConfirm = useCallback(() => {
+    if (!distancePopup) return;
+    const km = parseFloat(popupDistance);
+    if (isNaN(km) || km < 0.1) return;
+    onAddRoute(distancePopup.fromId, distancePopup.toId, km);
+    setDistancePopup(null);
+  }, [distancePopup, popupDistance, onAddRoute]);
+
+  const handlePopupCancel = useCallback(() => {
+    setDistancePopup(null);
+  }, []);
 
   const zoomBy = useCallback((factor: number) => {
     const svgEl = svgRef.current;
@@ -259,13 +462,26 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     });
   }, []);
 
+  // Nodes dimmed during edge drag (already connected to source)
+  const existingNeighbors = useMemo(() => {
+    const src = edgeStart;
+    if (!src) return new Set<string>();
+    return new Set(
+      routes
+        .filter(r => r.from === src || r.to === src)
+        .map(r => r.from === src ? r.to : r.from)
+    );
+  }, [edgeStart, routes]);
+
+  const isDrawingEdge = isDraggingEdge || (edgeStart !== null);
+
   return (
     <div className="relative w-full h-full bg-white rounded-2xl overflow-hidden border border-slate-200">
       <svg
         ref={svgRef}
         className="w-full h-full"
         onDoubleClick={handleSvgDoubleClick}
-        onClick={() => { onSelectElement(null); if (edgeStart) onEdgeStartSet(null); }}
+        onClick={() => { onSelectElement(null); if (edgeStart) { onEdgeStartSet(null); setMousePos(null); } }}
       >
         {/* Dot grid background */}
         <defs>
@@ -313,14 +529,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             );
           })}
 
-          {/* Edge-drawing preview line */}
-          {edgeStart && (() => {
-            const from = locations.find(l => l.id === edgeStart);
+          {/* Edge-drawing preview line — follows cursor */}
+          {isDrawingEdge && mousePos && (() => {
+            const srcId = edgeStart ?? dragSourceRef.current;
+            const from = locations.find(l => l.id === srcId);
             if (!from) return null;
             return (
-              <line x1={from.x} y1={from.y} x2={from.x} y2={from.y}
+              <line x1={from.x} y1={from.y} x2={mousePos.x} y2={mousePos.y}
                 stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3"
-                id="edge-preview" className="pointer-events-none" />
+                className="pointer-events-none" />
             );
           })()}
 
@@ -332,19 +549,29 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             const isCurrent = currentStep?.currentNodeId === loc.id;
             const isSelected = selectedElement?.type === 'location' && selectedElement.id === loc.id;
             const isEdgeStart = edgeStart === loc.id;
+            const isDropTarget = dragTarget === loc.id;
+            const isDimmed = isDrawingEdge &&
+              !isEdgeStart &&
+              existingNeighbors.has(loc.id) &&
+              !isDropTarget;
 
             return (
               <g key={loc.id}
                 transform={`translate(${loc.x},${loc.y})`}
                 className="cursor-pointer"
+                opacity={isDimmed ? 0.3 : 1}
                 onClick={e => handleNodeClick(e, loc)}
                 onMouseDown={e => handleNodeMouseDown(e, loc)}
-                onMouseEnter={() => setTooltip({ x: loc.x, y: loc.y, loc })}
-                onMouseLeave={() => setTooltip(null)}
+                onMouseEnter={() => { if (!isDraggingEdge) setTooltip({ x: loc.x, y: loc.y, loc }); setHoveredNodeId(loc.id); }}
+                onMouseLeave={() => { setTooltip(null); setHoveredNodeId(null); }}
               >
                 {/* Pulse ring for current node */}
                 {isCurrent && (
-                  <circle r={28} fill={fill} opacity={0.25} className="node-pulse" />
+                  <circle r={28} fill={fill} opacity={0.25} className="node-pulse" style={{ pointerEvents: 'none' }} />
+                )}
+                {/* Drop target highlight ring */}
+                {isDropTarget && (
+                  <circle r={26} fill="none" stroke="#10b981" strokeWidth={3} opacity={0.9} style={{ pointerEvents: 'none' }} />
                 )}
                 {/* Selection / role ring */}
                 {(ring || isSelected || isEdgeStart) && (
@@ -353,6 +580,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                     stroke={isEdgeStart ? '#f59e0b' : isSelected ? '#1d4ed8' : ring}
                     strokeWidth={isSelected ? 3 : ringWidth}
                     opacity={0.7}
+                    style={{ pointerEvents: 'none' }}
                   />
                 )}
                 {/* Main circle */}
@@ -372,6 +600,19 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                     fontSize={9} fontWeight={700} fill="white">
                     {loc.label}
                   </text>
+                )}
+                {/* Connection handle — visible on hover in edit mode */}
+                {uiMode === 'edit' && hoveredNodeId === loc.id && !isDrawingEdge && (
+                  <g
+                    transform="translate(22,0)"
+                    className="cursor-crosshair"
+                    onMouseDown={e => handleHandleMouseDown(e, loc)}
+                    onMouseEnter={e => { e.stopPropagation(); setHoveredNodeId(loc.id); }}
+                  >
+                    <circle r={7} fill="#f59e0b" stroke="white" strokeWidth={2} />
+                    <line x1={-3} y1={0} x2={3} y2={0} stroke="white" strokeWidth={1.5} strokeLinecap="round" />
+                    <line x1={0} y1={-3} x2={0} y2={3} stroke="white" strokeWidth={1.5} strokeLinecap="round" />
+                  </g>
                 )}
               </g>
             );
@@ -471,7 +712,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       </div>
 
       {/* Tooltip */}
-      {tooltip && (
+      {tooltip && !isDraggingEdge && !isDraggingNode && (
         <div
           className="absolute z-20 bg-white border border-slate-200 rounded-xl shadow-lg px-3 py-2 pointer-events-none max-w-48"
           style={{ left: tooltip.x + 30, top: Math.max(8, tooltip.y - 30) }}
@@ -491,8 +732,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             </div>
           )}
           {uiMode === 'edit' && (
-            <div className="text-[9px] text-slate-400 mt-1 border-t border-slate-100 pt-1">
-              Shift+click để vẽ cạnh
+            <div className="text-[9px] text-amber-600 mt-1 border-t border-slate-100 pt-1 font-medium">
+              Kéo handle vàng (+) để vẽ cạnh
             </div>
           )}
         </div>
@@ -503,7 +744,60 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         <div className="absolute bottom-3 right-3 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 text-[10px] text-amber-700 font-medium leading-tight">
           ✏️ Chế độ chỉnh sửa<br />
           Double-click: thêm điểm<br />
-          Shift+drag từ node: vẽ cạnh
+          Kéo handle vàng (+): vẽ cạnh
+        </div>
+      )}
+
+      {/* Distance popup — appears after connecting two nodes */}
+      {distancePopup && (
+        <div
+          className="fixed z-[200] bg-white border border-slate-200 rounded-2xl shadow-2xl p-4"
+          style={{
+            left: Math.max(8, Math.min(distancePopup.screenX - 110, window.innerWidth - 240)),
+            top: Math.max(8, distancePopup.screenY - 30),
+            minWidth: 220,
+          }}
+        >
+          <div className="text-xs font-bold text-slate-700 mb-1">Nhập khoảng cách (km)</div>
+          <div className="text-[11px] text-slate-500 mb-2">
+            <span className="font-semibold text-amber-600">{distancePopup.fromId}</span>
+            {' → '}
+            <span className="font-semibold text-amber-600">{distancePopup.toId}</span>
+          </div>
+          {distancePopup.suggestedKm !== null && (
+            <div className="text-[10px] text-emerald-600 bg-emerald-50 rounded-lg px-2 py-1 mb-2">
+              Haversine: ~{distancePopup.suggestedKm.toFixed(1)} km
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0.1}
+              max={9999}
+              step={0.1}
+              value={popupDistance}
+              onChange={e => setPopupDistance(e.target.value)}
+              autoFocus
+              className="w-24 border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
+              placeholder="0.0"
+              onKeyDown={e => {
+                if (e.key === 'Enter') handlePopupConfirm();
+                if (e.key === 'Escape') handlePopupCancel();
+              }}
+            />
+            <button
+              onClick={handlePopupConfirm}
+              className="flex-1 bg-emerald-600 text-white rounded-lg px-3 py-2 text-xs font-bold hover:bg-emerald-700 transition-colors"
+            >
+              Thêm cạnh
+            </button>
+            <button
+              onClick={handlePopupCancel}
+              className="bg-slate-100 text-slate-600 rounded-lg px-3 py-2 text-xs font-bold hover:bg-slate-200 transition-colors"
+            >
+              ✗
+            </button>
+          </div>
         </div>
       )}
     </div>

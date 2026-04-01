@@ -20,21 +20,24 @@ export function AdminPage() {
   const [graphData, setGraphData] = useState<GraphData>(INITIAL_GRAPH_DATA);
   const [presets, setPresets] = useState<PresetSelectionMap>(PRESET_SELECTIONS);
   const [loadingData, setLoadingData] = useState(true);
+  // Track whether data has ever loaded so subsequent refreshes don't unmount AdminDashboard
+  const [everLoaded, setEverLoaded] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const refreshData = useCallback(async () => {
-    setLoadingData(true);
+    if (!everLoaded) setLoadingData(true);
     try {
       const [graph, nextPresets] = await Promise.all([loadGraphData(), loadPresets()]);
       setGraphData(graph);
       setPresets(nextPresets);
     } finally {
       setLoadingData(false);
+      setEverLoaded(true);
     }
-  }, []);
+  }, [everLoaded]);
 
   useEffect(() => {
     void refreshData();

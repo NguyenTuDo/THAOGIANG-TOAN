@@ -120,7 +120,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
               onSelectElement={setSelectedElement}
               edgeStart={null}
               onEdgeStartSet={() => {}}
-              onAddRoute={() => {}}
+              onAddRoute={() => { /* view-only */ }}
             />
             <GraphLegend appMode={appMode} />
           </div>

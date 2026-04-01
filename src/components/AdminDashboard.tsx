@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { ExternalLink, PencilLine, Plus, Trash2, X } from 'lucide-react';
 import { AppMode, GraphData, PresetSelectionMap, Route, TouristLocation } from '../types';
+import { GraphCanvas } from './GraphCanvas';
 
 interface AdminDashboardProps {
   graphData: GraphData;
@@ -87,8 +88,66 @@ export function AdminDashboard({
   const [seeding, setSeeding] = useState(false);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [routeModalOpen, setRouteModalOpen] = useState(false);
+  const [edgeStart, setEdgeStart] = useState<string | null>(null);
+
+  // Local canvas positions: updated instantly on drag, saved to Supabase with debounce
+  const [localPositions, setLocalPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const hasPendingPositions = Object.keys(localPositions).length > 0;
+
+  const handleSavePositions = async () => {
+    if (!hasPendingPositions) return;
+    setSaving(true);
+    try {
+      for (const id of Object.keys(localPositions)) {
+        const pos = localPositions[id];
+        const loc = graphData.locations.find(l => l.id === id);
+        if (!pos || !loc) continue;
+        await onSaveLocation({ ...loc, x: Math.round(pos.x), y: Math.round(pos.y) });
+      }
+      setLocalPositions({});
+      showSuccess('Đã lưu vị trí các điểm trên đồ thị.');
+    } catch (error) {
+      showError(error);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const allLocationIds = useMemo(() => graphData.locations.map(location => location.id), [graphData.locations]);
+
+  // Canvas locations = Supabase data + in-flight drag overrides + auto-spread if all at default
+  const canvasLocations = useMemo(() => {
+    const locs = graphData.locations;
+    if (locs.length <= 1) return locs;
+
+    // Merge local drag positions
+    const withLocal = locs.map(loc => {
+      const local = localPositions[loc.id];
+      return local ? { ...loc, x: local.x, y: local.y } : loc;
+    });
+
+    // Auto-spread nodes that are still at the default position (no real position set yet)
+    const DEFAULT_X = 450, DEFAULT_Y = 280;
+    const isAtDefault = (orig: TouristLocation) =>
+      !localPositions[orig.id] &&
+      Math.abs(orig.x - DEFAULT_X) < 5 &&
+      Math.abs(orig.y - DEFAULT_Y) < 5;
+    const defaultCount = locs.filter(isAtDefault).length;
+    if (defaultCount <= 1) return withLocal;
+
+    const cols = Math.ceil(Math.sqrt(locs.length));
+    const spacing = 140;
+    const startX = DEFAULT_X - ((cols - 1) * spacing) / 2;
+    const startY = DEFAULT_Y - ((Math.ceil(locs.length / cols) - 1) * spacing) / 2;
+    // Use the node's original array index `i` as the grid slot — NOT a sequential counter.
+    // If we used autoIdx++, dragging one node out of the default pool would shift all
+    // subsequent default nodes to lower slots, causing the "nearest node to the right"
+    // to jump into the dragged node's old position.
+    return withLocal.map((loc, i) => {
+      if (!isAtDefault(locs[i])) return loc;
+      return { ...loc, x: startX + (i % cols) * spacing, y: startY + Math.floor(i / cols) * spacing };
+    });
+  }, [graphData.locations, localPositions]);
 
   React.useEffect(() => {
     setRouteWeights(
@@ -216,6 +275,25 @@ export function AdminDashboard({
     setRouteModalOpen(true);
   };
 
+  const handleCanvasAddRoute = async (from: string, to: string, distanceKm: number) => {
+    const id = buildRouteId(from, to);
+    setSaving(true);
+    try {
+      await onSaveRoute({ id, from, to, distanceKm });
+      showSuccess(`Đã thêm cạnh ${from} – ${to} (${distanceKm.toFixed(1)} km).`);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Instant visual update — saved to Supabase only when admin clicks "Lưu vị trí".
+  // Wrapped in useCallback so GraphCanvas gets a stable prop reference and doesn't
+  // recreate handleNodeMouseDown (which has onLocationDrag in its deps) mid-drag.
+  const handleCanvasMoveLocation = useCallback((id: string, x: number, y: number) => {
+    setLocalPositions(prev => ({ ...prev, [id]: { x, y } }));
+  }, []);
 
   return (
     <section className="space-y-6">
@@ -266,6 +344,59 @@ export function AdminDashboard({
           </div>
         )}
       </div>
+
+      {/* Visual graph editor */}
+      {graphData.locations.length > 0 && (
+        <div className="rounded-[30px] border border-[#ded5c7] bg-white/95 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <div className="text-xl font-black text-slate-900">Đồ thị tương tác</div>
+              <div className="mt-1 text-sm text-slate-500">
+                Hover node → kéo handle vàng (<span className="inline-block w-3 h-3 rounded-full bg-amber-400 align-middle" />) sang node khác để thêm cạnh.
+                Kéo node để đặt lại vị trí.
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {hasPendingPositions && (
+                <span className="text-xs text-amber-600 font-medium">
+                  {Object.keys(localPositions).length} điểm chưa lưu
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={!hasPendingPositions || saving}
+                onClick={() => void handleSavePositions()}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#14342b] px-4 py-2 text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Đang lưu…' : 'Lưu vị trí'}
+              </button>
+            </div>
+          </div>
+          <div className="rounded-2xl overflow-hidden" style={{ height: 520 }}>
+            <GraphCanvas
+              locations={canvasLocations}
+              routes={graphData.routes}
+              appMode="cycle"
+              uiMode="edit"
+              startId=""
+              endId={null}
+              selectedSubset={[]}
+              currentStep={null}
+              highlightedPaths={[]}
+              activePathIndex={0}
+              selectedElement={null}
+              onLocationClick={() => {}}
+              onLocationDrag={handleCanvasMoveLocation}
+              onCanvasDoubleClick={() => {}}
+              onRouteClick={() => {}}
+              onSelectElement={() => {}}
+              edgeStart={edgeStart}
+              onEdgeStartSet={setEdgeStart}
+              onAddRoute={(from, to, km) => void handleCanvasAddRoute(from, to, km)}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="rounded-[30px] border border-[#ded5c7] bg-white/95 p-6">
