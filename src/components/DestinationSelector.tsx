@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { ArrowRight, Compass, MapPin, Navigation, Route, RotateCcw, Sparkles, Wand2 } from 'lucide-react';
 import { TouristLocation, AppMode, LocationCategory } from '../types';
 import { LocationCard } from './LocationCard';
@@ -113,6 +113,38 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
       return true;
     });
   }, [locations, activeCategories, nearFar, userCoords, distanceMap]);
+
+  const [activeScrollIdx, setActiveScrollIdx] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const container = scrollContainerRef.current;
+    const children = container.children;
+    if (children.length === 0) return;
+
+    const containerCenter = container.scrollLeft + container.clientWidth / 2;
+    let closestIndex = 0;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i] as HTMLElement;
+      if (!child.classList.contains('snap-center')) continue;
+      const childCenter = child.offsetLeft + child.clientWidth / 2;
+      const distance = Math.abs(containerCenter - childCenter);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = i;
+      }
+    }
+    setActiveScrollIdx(closestIndex);
+  };
+
+  useEffect(() => {
+    setActiveScrollIdx(0);
+    scrollContainerRef.current?.scrollTo({ left: 0, behavior: 'instant' });
+  }, [filteredLocations.length]);
+
   const count = selectedIds.length;
   const startId = selectedIds[0] ?? null;
   const selectedLocations = selectedIds
@@ -380,31 +412,54 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div 
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className="flex -mx-6 gap-5 overflow-x-auto px-6 pb-8 snap-x snap-mandatory no-scrollbar md:mx-0 md:grid md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 md:px-0 md:pb-0"
+          >
             {filteredLocations.map(loc => {
               const idx = selectedIds.indexOf(loc.id);
               const isSelected = idx !== -1;
               const isDisabled = !isSelected && count >= cfg.max;
 
               return (
-                <LocationCard
-                  key={loc.id}
-                  location={loc}
-                  selectionIndex={isSelected ? idx : null}
-                  isStart={idx === 0}
-                  isEnd={appMode === 'path' && loc.id === endId}
-                  isDisabled={isDisabled}
-                  distanceKm={distanceMap[loc.id]}
-                  onClick={() => onToggle(loc.id)}
-                />
+                <div key={loc.id} className="w-[280px] shrink-0 snap-center md:w-auto">
+                  <LocationCard
+                    location={loc}
+                    selectionIndex={isSelected ? idx : null}
+                    isStart={idx === 0}
+                    isEnd={appMode === 'path' && loc.id === endId}
+                    isDisabled={isDisabled}
+                    distanceKm={distanceMap[loc.id]}
+                    onClick={() => onToggle(loc.id)}
+                  />
+                </div>
               );
             })}
-            {filteredLocations.length === 0 && (
-              <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
-                {t('Không có địa điểm nào khớp bộ lọc.', 'No destinations match the current filters.')}
-              </div>
-            )}
           </div>
+
+          {/* Pagination dots for mobile */}
+          {filteredLocations.length > 0 && (
+            <div className="mt-2 flex justify-center items-center gap-1.5 md:hidden">
+              {filteredLocations.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    scrollContainerRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                  }}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    i === activeScrollIdx ? 'w-6 bg-slate-800' : 'w-1.5 bg-slate-300'
+                  }`}
+                  aria-label={`Go to location ${i + 1}`}
+                />
+              ))}
+            </div>
+          )}
+          {filteredLocations.length === 0 && (
+            <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
+              {t('Không có địa điểm nào khớp bộ lọc.', 'No destinations match the current filters.')}
+            </div>
+          )}
 
           {appMode === 'path' && count === cfg.required && (
             <div className="mt-8 rounded-[30px] border border-rose-200 bg-[linear-gradient(135deg,#fff1f5,#fff7f6)] p-5 shadow-[0_12px_35px_rgba(190,24,93,0.08)]">

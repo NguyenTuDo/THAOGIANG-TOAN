@@ -86,6 +86,27 @@ export const LocationCard: React.FC<LocationCardProps> = ({
   const [imgIdx, setImgIdx] = useState(0);
   const [hovered, setHovered] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const imgScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleImageScroll = () => {
+    if (!imgScrollRef.current) return;
+    const { scrollLeft, clientWidth } = imgScrollRef.current;
+    if (clientWidth === 0) return;
+    const newIdx = Math.round(scrollLeft / clientWidth);
+    if (newIdx !== imgIdx) setImgIdx(newIdx);
+  };
+
+  // Sync scroll on imgIdx change (for auto-play and buttons)
+  useEffect(() => {
+    if (!imgScrollRef.current) return;
+    const { scrollLeft, clientWidth } = imgScrollRef.current;
+    if (Math.round(scrollLeft / clientWidth) !== imgIdx) {
+      imgScrollRef.current.scrollTo({
+        left: imgIdx * clientWidth,
+        behavior: hovered ? 'smooth' : 'instant',
+      });
+    }
+  }, [imgIdx, hovered]);
 
   const allImages: string[] = location.images?.length
     ? location.images
@@ -165,14 +186,20 @@ export const LocationCard: React.FC<LocationCardProps> = ({
       <div
         className={`relative aspect-[0.92] overflow-hidden bg-gradient-to-br ${theme.gradient}`}
       >
-        {allImages.map((src, i) => (
-          <img
-            key={src}
-            src={src}
-            alt=""
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${i === imgIdx ? 'opacity-100' : 'opacity-0'}`}
-          />
-        ))}
+        <div
+          ref={imgScrollRef}
+          onScroll={handleImageScroll}
+          className="flex h-full w-full overflow-x-auto snap-x snap-mandatory no-scrollbar"
+        >
+          {allImages.map((src, i) => (
+            <img
+              key={src}
+              src={src}
+              alt=""
+              className="h-full w-full flex-none snap-center object-cover"
+            />
+          ))}
+        </div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.32),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.68)_100%)]" />
 
         <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-4">
