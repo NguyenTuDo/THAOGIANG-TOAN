@@ -1,5 +1,5 @@
-import React from 'react';
-import { CheckCircle2, Clock3, MapPinned, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPinned, Navigation, Sparkles } from 'lucide-react';
 import { TouristLocation } from '../types';
 import { useLang, CATEGORY_EN } from '../contexts/LanguageContext';
 
@@ -75,13 +75,38 @@ interface LocationCardProps {
   isStart: boolean;
   isEnd: boolean;
   isDisabled: boolean;
+  distanceKm?: number;
   onClick: () => void;
 }
 
 export const LocationCard: React.FC<LocationCardProps> = ({
-  location, selectionIndex, isStart, isEnd, isDisabled, onClick,
+  location, selectionIndex, isStart, isEnd, isDisabled, distanceKm, onClick,
 }) => {
   const { lang, t } = useLang();
+  const [imgIdx, setImgIdx] = useState(0);
+  const [hovered, setHovered] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const allImages: string[] = location.images?.length
+    ? location.images
+    : location.imageUrl
+      ? [location.imageUrl]
+      : [];
+  const currentImage = allImages[imgIdx] ?? null;
+  const hasMultiple = allImages.length > 1;
+
+  // Auto-play khi hover
+  useEffect(() => {
+    if (hovered && hasMultiple) {
+      intervalRef.current = setInterval(() => {
+        setImgIdx(i => (i + 1) % allImages.length);
+      }, 1200);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [hovered, hasMultiple, allImages.length]);
+
   const theme = CATEGORY_THEME[location.category] ?? {
     gradient: 'from-slate-500 via-slate-600 to-slate-700',
     eyebrow: 'Điểm dừng',
@@ -108,18 +133,32 @@ export const LocationCard: React.FC<LocationCardProps> = ({
     location.visitDuration ?? 'Hợp cho một chặng đi bộ ngắn',
     location.visitDuration ?? 'Great for a short walk',
   );
-  const inlineStyle = location.imageUrl
+
+  const inlineStyle = currentImage
     ? {
-        backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.16) 0%, rgba(15,23,42,0.72) 100%), url("${location.imageUrl}")`,
+        backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.16) 0%, rgba(15,23,42,0.72) 100%), url("${currentImage}")`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }
     : undefined;
 
+  const distanceBadgeColor =
+    distanceKm === undefined ? null :
+    distanceKm < 1 ? 'bg-emerald-500' :
+    distanceKm < 3 ? 'bg-amber-500' :
+    'bg-slate-500';
+
+  const distanceLabel =
+    distanceKm === undefined ? null :
+    distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` :
+    `${distanceKm.toFixed(1)} km`;
+
   return (
     <button
       onClick={onClick}
       disabled={isDisabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       className={`group relative w-full overflow-hidden rounded-[28px] border border-white/50 text-left transition-all duration-300 ${
         isDisabled ? 'scale-[0.98] cursor-not-allowed opacity-40' : 'cursor-pointer hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(15,23,42,0.16)]'
       } ${
@@ -144,6 +183,45 @@ export const LocationCard: React.FC<LocationCardProps> = ({
             {lang === 'en' ? theme.metaEn : theme.meta}
           </div>
         </div>
+
+        {/* Distance badge */}
+        {distanceBadgeColor && distanceLabel && (
+          <div className={`absolute left-4 top-14 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white shadow ${distanceBadgeColor}`}>
+            <Navigation className="h-3 w-3" />
+            {distanceLabel}
+          </div>
+        )}
+
+        {/* Image carousel controls */}
+        {hasMultiple && (
+          <>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i - 1 + allImages.length) % allImages.length); }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </div>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i + 1) % allImages.length); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </div>
+            {/* Dots */}
+            <div className="absolute bottom-16 left-1/2 flex -translate-x-1/2 gap-1">
+              {allImages.map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 w-1.5 rounded-full transition-colors ${i === imgIdx ? 'bg-white' : 'bg-white/40'}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="absolute inset-x-0 bottom-0 p-4">
           <div className={`mb-2 text-[11px] font-medium uppercase tracking-[0.28em] ${theme.accent}`}>

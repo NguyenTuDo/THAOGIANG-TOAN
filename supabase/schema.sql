@@ -1,6 +1,6 @@
 -- ============================================================
 -- unified-tourist-app — Supabase Schema
--- Cập nhật: 2026-04-01
+-- Cập nhật: 2026-04-01 (v2: thêm images[], lat, lng)
 -- Chạy toàn bộ file này trong Supabase SQL Editor (New query → Run)
 -- ============================================================
 
@@ -27,6 +27,9 @@ create table if not exists locations (
   "bestForEn"    text,
   highlights     text[],
   "highlightsEn" text[],
+  images         text[],
+  lat            float8,
+  lng            float8,
   x              integer not null,
   y              integer not null
 );
@@ -57,6 +60,9 @@ alter table locations add column if not exists "googleMapsUrl"  text;
 alter table locations add column if not exists "neighborhoodEn" text;
 alter table locations add column if not exists "bestForEn"      text;
 alter table locations add column if not exists "highlightsEn"   text[];
+alter table locations add column if not exists images           text[];
+alter table locations add column if not exists lat              float8;
+alter table locations add column if not exists lng              float8;
 
 -- ------------------------------------------------------------
 -- 3. ROW LEVEL SECURITY

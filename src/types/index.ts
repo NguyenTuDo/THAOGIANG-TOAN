@@ -19,7 +19,8 @@ export interface TouristLocation {
   descriptionEn?: string;
   shortIntro?: string;
   shortIntroEn?: string;
-  imageUrl?: string;
+  imageUrl?: string;   // ảnh chính (legacy, dùng images[] ưu tiên hơn)
+  images?: string[];   // danh sách nhiều ảnh
   googleMapsUrl?: string;
   neighborhood?: string;
   neighborhoodEn?: string;
@@ -28,6 +29,8 @@ export interface TouristLocation {
   bestForEn?: string;
   highlights?: string[];
   highlightsEn?: string[];
+  lat?: number;        // vĩ độ địa lý (dùng cho tính khoảng cách)
+  lng?: number;        // kinh độ địa lý
   x: number;           // tọa độ canvas 0-900
   y: number;           // tọa độ canvas 0-600
 }

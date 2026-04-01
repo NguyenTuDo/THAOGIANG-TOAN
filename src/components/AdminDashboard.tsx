@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, ImagePlus, PencilLine, Plus, Trash2, X } from 'lucide-react';
+import { ExternalLink, PencilLine, Plus, Trash2, X } from 'lucide-react';
 import { AppMode, GraphData, PresetSelectionMap, Route, TouristLocation } from '../types';
 
 interface AdminDashboardProps {
@@ -23,7 +23,8 @@ const EMPTY_LOCATION: TouristLocation = {
   descriptionEn: '',
   shortIntro: '',
   shortIntroEn: '',
-  imageUrl: '',
+  imageUrl: undefined,
+  images: [],
   googleMapsUrl: '',
   neighborhood: '',
   neighborhoodEn: '',
@@ -32,6 +33,8 @@ const EMPTY_LOCATION: TouristLocation = {
   bestForEn: '',
   highlights: [],
   highlightsEn: [],
+  lat: undefined,
+  lng: undefined,
   x: 450,
   y: 280,
 };
@@ -124,7 +127,8 @@ export function AdminDashboard({
         descriptionEn: locationForm.descriptionEn?.trim() || undefined,
         shortIntro: locationForm.shortIntro?.trim() || undefined,
         shortIntroEn: locationForm.shortIntroEn?.trim() || undefined,
-        imageUrl: locationForm.imageUrl?.trim() || undefined,
+        images: (locationForm.images ?? []).map(u => u.trim()).filter(Boolean),
+        imageUrl: undefined,
         googleMapsUrl: locationForm.googleMapsUrl?.trim() || undefined,
         neighborhood: locationForm.neighborhood?.trim() || undefined,
         neighborhoodEn: locationForm.neighborhoodEn?.trim() || undefined,
@@ -133,6 +137,8 @@ export function AdminDashboard({
         bestForEn: locationForm.bestForEn?.trim() || undefined,
         highlights: (locationForm.highlights ?? []).filter(Boolean),
         highlightsEn: (locationForm.highlightsEn ?? []).filter(Boolean),
+        lat: locationForm.lat || undefined,
+        lng: locationForm.lng || undefined,
       };
       await onSaveLocation(normalized);
       showSuccess(`Đã lưu địa điểm ${normalized.fullName}.`);
@@ -179,7 +185,8 @@ export function AdminDashboard({
       descriptionEn: location.descriptionEn ?? '',
       shortIntro: location.shortIntro ?? '',
       shortIntroEn: location.shortIntroEn ?? '',
-      imageUrl: location.imageUrl ?? '',
+      imageUrl: undefined,
+      images: location.images ?? (location.imageUrl ? [location.imageUrl] : []),
       googleMapsUrl: location.googleMapsUrl ?? '',
       neighborhood: location.neighborhood ?? '',
       neighborhoodEn: location.neighborhoodEn ?? '',
@@ -201,13 +208,6 @@ export function AdminDashboard({
     setRouteModalOpen(true);
   };
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    setLocationForm(current => ({ ...current, imageUrl: dataUrl }));
-    event.target.value = '';
-  };
 
   return (
     <section className="space-y-6">
@@ -454,22 +454,64 @@ export function AdminDashboard({
               <Field label="Khu vực (EN)">
                 <input value={locationForm.neighborhoodEn ?? ''} placeholder="Example: Paris Commune Square, District 1" onChange={event => setLocationForm(current => ({ ...current, neighborhoodEn: event.target.value }))} className="field-input" />
               </Field>
-              <Field label="Ảnh bằng link" full>
-                <input value={locationForm.imageUrl ?? ''} placeholder="https://... hoặc /images/..." onChange={event => setLocationForm(current => ({ ...current, imageUrl: event.target.value }))} className="field-input" />
+              {/* Multi-image carousel */}
+              <div className="md:col-span-2 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Ảnh địa điểm (carousel — ảnh đầu tiên là ảnh chính)</div>
+                {(locationForm.images ?? []).map((url, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={url}
+                        placeholder={`Ảnh ${i + 1}: https://...`}
+                        onChange={e => setLocationForm(curr => {
+                          const imgs = [...(curr.images ?? [])];
+                          imgs[i] = e.target.value;
+                          return { ...curr, images: imgs };
+                        })}
+                        className="field-input flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setLocationForm(curr => ({ ...curr, images: (curr.images ?? []).filter((_, j) => j !== i) }))}
+                        className="shrink-0 rounded-full px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                    {url && (
+                      <img src={url} alt={`preview-${i}`} className="max-h-40 w-full rounded-xl object-cover border border-slate-200" />
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setLocationForm(curr => ({ ...curr, images: [...(curr.images ?? []), ''] }))}
+                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  + Thêm ảnh
+                </button>
+              </div>
+              {/* Lat/Lng */}
+              <Field label="Vĩ độ (lat)">
+                <input
+                  type="number"
+                  step="any"
+                  value={locationForm.lat ?? ''}
+                  placeholder="Ví dụ: 10.7769"
+                  onChange={e => setLocationForm(curr => ({ ...curr, lat: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  className="field-input"
+                />
               </Field>
-              <Field label="Upload ảnh" full>
-                <label className="flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50">
-                  <ImagePlus className="h-4 w-4" />
-                  Chọn ảnh từ máy để gắn trực tiếp
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                </label>
+              <Field label="Kinh độ (lng)">
+                <input
+                  type="number"
+                  step="any"
+                  value={locationForm.lng ?? ''}
+                  placeholder="Ví dụ: 106.6951"
+                  onChange={e => setLocationForm(curr => ({ ...curr, lng: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  className="field-input"
+                />
               </Field>
-              {locationForm.imageUrl && (
-                <div className="md:col-span-2 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Xem trước ảnh</div>
-                  <img src={locationForm.imageUrl} alt={locationForm.fullName || 'preview'} className="max-h-56 w-full rounded-xl object-cover" />
-                </div>
-              )}
               <Field label="Mô tả ngắn (VI)" full>
                 <textarea value={locationForm.shortIntro ?? ''} placeholder="Ví dụ: Điểm mang tính biểu tượng, hợp cho khách lần đầu đến trung tâm thành phố." onChange={event => setLocationForm(current => ({ ...current, shortIntro: event.target.value }))} rows={2} className="field-input min-h-[92px]" />
               </Field>
@@ -671,11 +713,3 @@ function Field({
   );
 }
 
-async function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}

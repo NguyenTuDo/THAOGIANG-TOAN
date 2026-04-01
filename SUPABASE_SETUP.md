@@ -93,6 +93,9 @@ alter table locations add column if not exists "googleMapsUrl" text;
 alter table locations add column if not exists "neighborhoodEn" text;
 alter table locations add column if not exists "bestForEn" text;
 alter table locations add column if not exists "highlightsEn" text[];
+alter table locations add column if not exists images text[];
+alter table locations add column if not exists lat float8;
+alter table locations add column if not exists lng float8;
 ```
 
 ---

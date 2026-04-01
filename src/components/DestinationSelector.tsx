@@ -1,8 +1,10 @@
-import React from 'react';
-import { ArrowRight, Compass, MapPin, Route, RotateCcw, Sparkles, Wand2 } from 'lucide-react';
-import { TouristLocation, AppMode } from '../types';
+import React, { useMemo, useState } from 'react';
+import { ArrowRight, Compass, MapPin, Navigation, Route, RotateCcw, Sparkles, Wand2 } from 'lucide-react';
+import { TouristLocation, AppMode, LocationCategory } from '../types';
 import { LocationCard } from './LocationCard';
-import { useLang } from '../contexts/LanguageContext';
+import { useLang, CATEGORY_EN } from '../contexts/LanguageContext';
+import { useGeolocation } from '../hooks/useGeolocation';
+import { haversineKm } from '../lib/geo';
 
 interface DestinationSelectorProps {
   locations: TouristLocation[];
@@ -71,6 +73,46 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
 }) => {
   const { lang, t } = useLang();
   const cfg = MODE_CONFIG[appMode];
+  const { state: geoState, request: requestGeo } = useGeolocation();
+
+  // Category filter
+  const [activeCategories, setActiveCategories] = useState<LocationCategory[]>([]);
+  const availableCategories = useMemo(
+    () => [...new Set(locations.map(l => l.category))] as LocationCategory[],
+    [locations],
+  );
+  const toggleCategory = (cat: LocationCategory) =>
+    setActiveCategories(prev =>
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat],
+    );
+
+  // Near/far filter
+  const [nearFar, setNearFar] = useState<'all' | 'near' | 'far'>('all');
+  const NEAR_THRESHOLD_KM = 2;
+
+  // Compute distances if geolocation available
+  const userCoords = geoState.status === 'ok' ? geoState.coords : null;
+  const distanceMap = useMemo<Record<string, number>>(() => {
+    if (!userCoords) return {};
+    return Object.fromEntries(
+      locations
+        .filter(l => l.lat !== undefined && l.lng !== undefined)
+        .map(l => [l.id, haversineKm(userCoords.lat, userCoords.lng, l.lat!, l.lng!)]),
+    );
+  }, [userCoords, locations]);
+
+  // Filtered locations
+  const filteredLocations = useMemo(() => {
+    return locations.filter(l => {
+      if (activeCategories.length > 0 && !activeCategories.includes(l.category)) return false;
+      if (nearFar !== 'all' && userCoords && l.lat !== undefined && l.lng !== undefined) {
+        const d = distanceMap[l.id] ?? Infinity;
+        if (nearFar === 'near' && d >= NEAR_THRESHOLD_KM) return false;
+        if (nearFar === 'far' && d < NEAR_THRESHOLD_KM) return false;
+      }
+      return true;
+    });
+  }, [locations, activeCategories, nearFar, userCoords, distanceMap]);
   const count = selectedIds.length;
   const startId = selectedIds[0] ?? null;
   const selectedLocations = selectedIds
@@ -268,8 +310,78 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
             </div>
           )}
 
+          {/* ── Bộ lọc ── */}
+          <div className="mb-5 space-y-3">
+            {/* Category chips */}
+            {availableCategories.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setActiveCategories([])}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activeCategories.length === 0
+                      ? 'border-slate-800 bg-slate-800 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
+                  }`}
+                >
+                  {t('Tất cả', 'All')}
+                </button>
+                {availableCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => toggleCategory(cat)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      activeCategories.includes(cat)
+                        ? 'border-slate-800 bg-slate-800 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
+                    }`}
+                  >
+                    {lang === 'en' ? (CATEGORY_EN[cat] ?? cat) : cat}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Near/Far filter + geolocation */}
+            <div className="flex flex-wrap items-center gap-2">
+              {geoState.status !== 'ok' ? (
+                <button
+                  onClick={requestGeo}
+                  disabled={geoState.status === 'loading'}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-400 disabled:opacity-60"
+                >
+                  <Navigation className="h-3.5 w-3.5" />
+                  {geoState.status === 'loading'
+                    ? t('Đang xác định vị trí...', 'Locating...')
+                    : geoState.status === 'error'
+                      ? t('Không lấy được vị trí', 'Location unavailable')
+                      : t('Bật vị trí để lọc gần/xa', 'Enable location for near/far filter')}
+                </button>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                    <Navigation className="h-3.5 w-3.5 text-emerald-500" />
+                    {t('Vị trí đã bật', 'Location active')}
+                  </span>
+                  {(['all', 'near', 'far'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setNearFar(f)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        nearFar === f
+                          ? 'border-emerald-600 bg-emerald-600 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
+                      }`}
+                    >
+                      {f === 'all' ? t('Tất cả', 'All') : f === 'near' ? t('Gần tôi (<2 km)', 'Near me (<2 km)') : t('Xa hơn', 'Further away')}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {locations.map(loc => {
+            {filteredLocations.map(loc => {
               const idx = selectedIds.indexOf(loc.id);
               const isSelected = idx !== -1;
               const isDisabled = !isSelected && count >= cfg.max;
@@ -282,10 +394,16 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
                   isStart={idx === 0}
                   isEnd={appMode === 'path' && loc.id === endId}
                   isDisabled={isDisabled}
+                  distanceKm={distanceMap[loc.id]}
                   onClick={() => onToggle(loc.id)}
                 />
               );
             })}
+            {filteredLocations.length === 0 && (
+              <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
+                {t('Không có địa điểm nào khớp bộ lọc.', 'No destinations match the current filters.')}
+              </div>
+            )}
           </div>
 
           {appMode === 'path' && count === cfg.required && (
