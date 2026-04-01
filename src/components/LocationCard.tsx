@@ -92,7 +92,6 @@ export const LocationCard: React.FC<LocationCardProps> = ({
     : location.imageUrl
       ? [location.imageUrl]
       : [];
-  const currentImage = allImages[imgIdx] ?? null;
   const hasMultiple = allImages.length > 1;
 
   // Auto-play khi hover
@@ -134,14 +133,6 @@ export const LocationCard: React.FC<LocationCardProps> = ({
     location.visitDuration ?? 'Great for a short walk',
   );
 
-  const inlineStyle = currentImage
-    ? {
-        backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.16) 0%, rgba(15,23,42,0.72) 100%), url("${currentImage}")`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }
-    : undefined;
-
   const distanceBadgeColor =
     distanceKm === undefined ? null :
     distanceKm < 1 ? 'bg-emerald-500' :
@@ -171,8 +162,15 @@ export const LocationCard: React.FC<LocationCardProps> = ({
     >
       <div
         className={`relative aspect-[0.92] overflow-hidden bg-gradient-to-br ${theme.gradient}`}
-        style={inlineStyle}
       >
+        {allImages.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${i === imgIdx ? 'opacity-100' : 'opacity-0'}`}
+          />
+        ))}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.32),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.68)_100%)]" />
 
         <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-4">
