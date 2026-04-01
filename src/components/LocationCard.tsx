@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPinned, Navigation, Sparkles } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Map as MapIcon, MapPinned, Navigation, Sparkles } from 'lucide-react';
 import { TouristLocation } from '../types';
 import { useLang, CATEGORY_EN } from '../contexts/LanguageContext';
 
@@ -145,9 +145,11 @@ export const LocationCard: React.FC<LocationCardProps> = ({
     `${distanceKm.toFixed(1)} km`;
 
   return (
-    <button
-      onClick={onClick}
-      disabled={isDisabled}
+    <div
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      onClick={isDisabled ? undefined : onClick}
+      onKeyDown={isDisabled ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={`group relative w-full overflow-hidden rounded-[28px] border border-white/50 text-left transition-all duration-300 ${
@@ -278,10 +280,24 @@ export const LocationCard: React.FC<LocationCardProps> = ({
             <Clock3 className="h-3.5 w-3.5" />
             {visitLabel}
           </span>
-          <span className="floating-mark inline-flex items-center gap-1 font-semibold text-slate-700">
-            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-            {addToTripLabel}
-          </span>
+          <div className="flex items-center gap-2">
+            {location.googleMapsUrl && (
+              <a
+                href={location.googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-600 hover:bg-blue-100"
+              >
+                <MapIcon className="h-3 w-3" />
+                Maps
+              </a>
+            )}
+            <span className="floating-mark inline-flex items-center gap-1 font-semibold text-slate-700">
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+              {addToTripLabel}
+            </span>
+          </div>
         </div>
         {(displayNeighborhood || displayBestFor) && (
           <div className="mt-2 space-y-1 text-[11px] text-slate-500">
@@ -311,6 +327,6 @@ export const LocationCard: React.FC<LocationCardProps> = ({
           </div>
         </div>
       )}
-    </button>
+    </div>
   );
 };

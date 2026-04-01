@@ -77,6 +77,8 @@ export function AdminDashboard({
   onSeedInitialData,
 }: AdminDashboardProps) {
   const [locationForm, setLocationForm] = useState<TouristLocation>(EMPTY_LOCATION);
+  const [highlightsDraft, setHighlightsDraft] = useState('');
+  const [highlightsEnDraft, setHighlightsEnDraft] = useState('');
   const [routeForm, setRouteForm] = useState<Route>(EMPTY_ROUTE);
   const [routeWeights, setRouteWeights] = useState<Record<string, number>>({});
   const [status, setStatus] = useState<string | null>(null);
@@ -135,14 +137,16 @@ export function AdminDashboard({
         visitDuration: undefined,
         bestFor: locationForm.bestFor?.trim() || undefined,
         bestForEn: locationForm.bestForEn?.trim() || undefined,
-        highlights: (locationForm.highlights ?? []).filter(Boolean),
-        highlightsEn: (locationForm.highlightsEn ?? []).filter(Boolean),
+        highlights: highlightsDraft.split(',').map(s => s.trim()).filter(Boolean),
+        highlightsEn: highlightsEnDraft.split(',').map(s => s.trim()).filter(Boolean),
         lat: locationForm.lat || undefined,
         lng: locationForm.lng || undefined,
       };
       await onSaveLocation(normalized);
       showSuccess(`Đã lưu địa điểm ${normalized.fullName}.`);
       setLocationForm(EMPTY_LOCATION);
+      setHighlightsDraft('');
+      setHighlightsEnDraft('');
       setLocationModalOpen(false);
     } catch (error) {
       showError(error);
@@ -175,6 +179,8 @@ export function AdminDashboard({
 
   const openNewLocationModal = () => {
     setLocationForm(EMPTY_LOCATION);
+    setHighlightsDraft('');
+    setHighlightsEnDraft('');
     setLocationModalOpen(true);
   };
 
@@ -195,6 +201,8 @@ export function AdminDashboard({
       highlights: location.highlights ?? [],
       highlightsEn: location.highlightsEn ?? [],
     });
+    setHighlightsDraft((location.highlights ?? []).join(', '));
+    setHighlightsEnDraft((location.highlightsEn ?? []).join(', '));
     setLocationModalOpen(true);
   };
 
@@ -532,23 +540,17 @@ export function AdminDashboard({
               </Field>
               <Field label="Điểm nhấn (VI, cách nhau bằng dấu phẩy)" full>
                 <input
-                  value={(locationForm.highlights ?? []).join(', ')}
+                  value={highlightsDraft}
                   placeholder="Ví dụ: Mặt tiền biểu tượng, Cụm du lịch trung tâm, Dễ nối sang Bưu điện"
-                  onChange={event => setLocationForm(current => ({
-                    ...current,
-                    highlights: event.target.value.split(',').map(item => item.trim()).filter(Boolean),
-                  }))}
+                  onChange={event => setHighlightsDraft(event.target.value)}
                   className="field-input"
                 />
               </Field>
               <Field label="Điểm nhấn (EN, cách nhau bằng dấu phẩy)" full>
                 <input
-                  value={(locationForm.highlightsEn ?? []).join(', ')}
+                  value={highlightsEnDraft}
                   placeholder="Example: Iconic facade, Central tourist cluster, Easy connection to Post Office"
-                  onChange={event => setLocationForm(current => ({
-                    ...current,
-                    highlightsEn: event.target.value.split(',').map(item => item.trim()).filter(Boolean),
-                  }))}
+                  onChange={event => setHighlightsEnDraft(event.target.value)}
                   className="field-input"
                 />
               </Field>
