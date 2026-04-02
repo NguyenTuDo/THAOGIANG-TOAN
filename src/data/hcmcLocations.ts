@@ -20,6 +20,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'BT',
     label: 'Marie\nCurie',
+    displayOrder: 0,
     fullName: 'THPT Marie Curie',
     fullNameEn: 'Marie Curie High School',
     category: 'Di sản học đường',
@@ -41,6 +42,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'NT',
     label: 'Hồ\nCon\nRùa',
+    displayOrder: 1,
     fullName: 'Hồ Con Rùa',
     fullNameEn: 'Turtle Lake',
     category: 'Danh lam thắng cảnh',
@@ -62,6 +64,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'BM',
     label: 'Bảo\nTàng',
+    displayOrder: 2,
     fullName: 'Bảo Tàng Chứng Tích Chiến Tranh',
     fullNameEn: 'War Remnants Museum',
     category: 'Bảo tàng',
@@ -83,6 +86,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'DT',
     label: 'Dinh\nThống\nNhất',
+    displayOrder: 3,
     fullName: 'Dinh Thống Nhất',
     fullNameEn: 'Reunification Palace',
     category: 'Danh lam thắng cảnh',
@@ -104,6 +108,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'PD',
     label: 'Nhà\nVH\nTN',
+    displayOrder: 4,
     fullName: 'Nhà Văn Hóa Thanh Niên',
     fullNameEn: 'Youth Cultural Center',
     category: 'Danh lam thắng cảnh',
@@ -125,6 +130,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'BX',
     label: 'Chợ\nTân\nĐịnh',
+    displayOrder: 5,
     fullName: 'Chợ Tân Định',
     fullNameEn: 'Tan Dinh Market',
     category: 'Mua sắm',
@@ -146,6 +152,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'TD',
     label: 'Tao\nĐàn',
+    displayOrder: 6,
     fullName: 'Công Viên Tao Đàn',
     fullNameEn: 'Tao Dan Park',
     category: 'Công viên',
@@ -167,6 +174,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'DS',
     label: 'Nhà\nThờ\nĐức\nBà',
+    displayOrder: 7,
     fullName: 'Nhà Thờ Đức Bà',
     fullNameEn: 'Notre-Dame Cathedral',
     category: 'Danh lam thắng cảnh',
@@ -188,6 +196,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'NB',
     label: 'Bưu\nĐiện',
+    displayOrder: 8,
     fullName: 'Bưu Điện Trung Tâm Sài Gòn',
     fullNameEn: 'Saigon Central Post Office',
     category: 'Danh lam thắng cảnh',
@@ -209,6 +218,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
   {
     id: 'L8',
     label: 'Đường\nSách',
+    displayOrder: 9,
     fullName: 'Đường Sách Nguyễn Văn Bình',
     fullNameEn: 'Nguyen Van Binh Book Street',
     category: 'Danh lam thắng cảnh',

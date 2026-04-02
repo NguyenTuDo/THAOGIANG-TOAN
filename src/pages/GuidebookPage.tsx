@@ -5,7 +5,7 @@ import { GraphView } from '../components/GraphView';
 import { findShortestHamiltonianCycle } from '../algorithms/hamiltonianCycle';
 import { findShortestHamiltonianPath } from '../algorithms/hamiltonianPath';
 import { findShortestSubsetRoute } from '../algorithms/subsetRoute';
-import { loadGraphData, loadPresets, readLocalDraft, writeLocalDraft } from '../lib/dataStore';
+import { loadGraphData, loadPresets, readLocalDraft, TOURIST_DATA_CHANGED_EVENT, writeLocalDraft } from '../lib/dataStore';
 import { useLang } from '../contexts/LanguageContext';
 import { AppMode, AlgorithmResult, GraphData, PresetSelectionMap } from '../types';
 
@@ -67,6 +67,24 @@ export function GuidebookPage() {
 
   useEffect(() => {
     void refreshData();
+  }, [refreshData]);
+
+  useEffect(() => {
+    const handleDataChanged = () => {
+      void refreshData();
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (!event.key?.startsWith('tourist.')) return;
+      void refreshData();
+    };
+
+    window.addEventListener(TOURIST_DATA_CHANGED_EVENT, handleDataChanged);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      window.removeEventListener(TOURIST_DATA_CHANGED_EVENT, handleDataChanged);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [refreshData]);
 
   useEffect(() => {

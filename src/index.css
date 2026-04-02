@@ -110,6 +110,103 @@
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
 }
 
+.map-route-order-icon,
+.map-route-flow-icon,
+.map-route-vehicle-icon {
+  background: transparent;
+  border: 0;
+}
+
+.map-route-order {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #0f766e, #10b981);
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow:
+    0 12px 22px rgba(15, 23, 42, 0.18),
+    0 0 0 6px rgba(255, 255, 255, 0.78);
+}
+
+.map-route-order.is-start {
+  background: linear-gradient(180deg, #2563eb, #38bdf8);
+}
+
+.map-route-order.is-end {
+  background: linear-gradient(180deg, #e11d48, #fb7185);
+}
+
+.map-route-flow {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #059669;
+  font-size: 16px;
+  font-weight: 900;
+  box-shadow:
+    0 10px 18px rgba(15, 23, 42, 0.14),
+    0 0 0 4px rgba(255, 255, 255, 0.78);
+}
+
+.map-route-flow svg {
+  width: 18px;
+  height: 18px;
+  stroke: #dc2626;
+  stroke-width: 2.6;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-route-vehicle {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #fb7185, #e11d48 68%, #9f1239 100%);
+  border: 2px solid rgba(255, 255, 255, 0.98);
+  color: #ffffff;
+  box-shadow:
+    0 18px 32px rgba(225, 29, 72, 0.42),
+    0 0 0 8px rgba(255, 255, 255, 0.84);
+  clip-path: polygon(12% 20%, 72% 20%, 72% 6%, 100% 50%, 72% 94%, 72% 80%, 12% 80%, 12% 60%, 0 60%, 0 40%, 12% 40%);
+}
+
+.map-route-vehicle-glow {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  animation: map-vehicle-pulse 1.2s ease-in-out infinite;
+}
+
+.map-route-vehicle svg {
+  width: 20px;
+  height: 20px;
+  stroke: #ffffff;
+  stroke-width: 2.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-background-muted .leaflet-tile-pane {
+  filter: saturate(0.82) brightness(1.04);
+}
+
+.leaflet-container:has(.map-route-vehicle-icon) .leaflet-pane.leaflet-tile-pane {
+  transition: filter 0.25s ease;
+}
+
 @keyframes map-node-pulse {
   0% {
     opacity: 0.65;
@@ -122,6 +219,21 @@
   100% {
     opacity: 0;
     transform: scale(1.2);
+  }
+}
+
+@keyframes map-vehicle-pulse {
+  0% {
+    transform: scale(0.94);
+    filter: drop-shadow(0 0 0 rgba(244, 63, 94, 0.16));
+  }
+  55% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 18px rgba(244, 63, 94, 0.36));
+  }
+  100% {
+    transform: scale(0.94);
+    filter: drop-shadow(0 0 0 rgba(244, 63, 94, 0.16));
   }
 }
 

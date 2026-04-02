@@ -147,7 +147,7 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
   const nextImage = () => setImageIndex(current => (current + 1) % images.length);
 
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
+    <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
       <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
         {t('Hồ sơ điểm đến', 'Stop profile')}
       </div>
@@ -155,7 +155,7 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
       <div className={`relative mt-3 overflow-hidden rounded-[24px] bg-gradient-to-br ${gradient}`}>
         {images.length > 0 ? (
           <>
-            <img src={images[imageIndex]} alt={displayName} className="h-56 w-full object-cover" />
+            <img src={images[imageIndex]} alt={displayName} className="h-52 w-full object-cover" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.82)_100%)]" />
             {images.length > 1 && (
               <>
@@ -175,7 +175,7 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
-                <div className="absolute bottom-16 left-1/2 flex -translate-x-1/2 gap-1.5">
+                <div className="absolute bottom-14 left-1/2 flex -translate-x-1/2 gap-1.5">
                   {images.map((image, index) => (
                     <span key={image} className={`h-1.5 w-1.5 rounded-full ${index === imageIndex ? 'bg-white' : 'bg-white/40'}`} />
                   ))}
@@ -184,7 +184,7 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
             )}
           </>
         ) : (
-          <div className="h-56 w-full bg-gradient-to-br from-white/20 to-black/10" />
+          <div className="h-52 w-full bg-gradient-to-br from-white/20 to-black/10" />
         )}
 
         <div className="absolute left-4 top-4 rounded-full border border-white/20 bg-white/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/90 backdrop-blur-sm">
@@ -192,29 +192,29 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
         </div>
         <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
           <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-white/70">{selectedLocation.id}</div>
-          <div className="mt-2 text-[1.75rem] font-black leading-[0.95] tracking-tight">{displayName}</div>
-          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs text-white/88 backdrop-blur-sm">
+          <div className="mt-2 text-[2rem] font-black leading-[0.95] tracking-tight">{displayName}</div>
+          <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs text-white/88 backdrop-blur-sm">
             <Sparkles className="h-3.5 w-3.5" /> {displayIntro}
           </div>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {displayNeighborhood && (
           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700">
             <div className="inline-flex items-center gap-2 font-semibold text-slate-800"><MapPinned className="h-4 w-4 text-sky-600" /> {t('Khu vực', 'Area')}</div>
-            <div className="mt-1 text-xs leading-6 text-slate-600">{displayNeighborhood}</div>
+            <div className="mt-1 text-sm leading-7 text-slate-600">{displayNeighborhood}</div>
           </div>
         )}
         {selectedLocation.visitDuration && (
           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700">
             <div className="inline-flex items-center gap-2 font-semibold text-slate-800"><Clock3 className="h-4 w-4 text-amber-600" /> {t('Thời lượng', 'Visit time')}</div>
-            <div className="mt-1 text-xs leading-6 text-slate-600">{selectedLocation.visitDuration}</div>
+            <div className="mt-1 text-sm leading-7 text-slate-600">{selectedLocation.visitDuration}</div>
           </div>
         )}
       </div>
 
-      <div className="mt-3 rounded-2xl border border-slate-100 bg-white px-3 py-3">
+      <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
         <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{t('Giới thiệu', 'Overview')}</div>
         <div className="mt-2 text-sm leading-7 text-slate-700">{displayDescription}</div>
       </div>
@@ -224,7 +224,7 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
           {displayBestFor && (
             <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700">
               <div className="inline-flex items-center gap-2 font-semibold text-slate-800"><Navigation className="h-4 w-4 text-emerald-600" /> {t('Phù hợp', 'Best for')}</div>
-              <div className="mt-1 text-xs leading-6 text-slate-600">{displayBestFor}</div>
+              <div className="mt-1 text-sm leading-7 text-slate-600">{displayBestFor}</div>
             </div>
           )}
           {selectedLocation.googleMapsUrl && (
@@ -235,7 +235,7 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
               className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700 transition hover:bg-slate-100"
             >
               <div className="inline-flex items-center gap-2 font-semibold text-slate-800"><MapIcon className="h-4 w-4 text-blue-600" /> Google Maps</div>
-              <div className="mt-1 inline-flex items-center gap-1 text-xs text-blue-700">
+              <div className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-blue-700">
                 {t('Mở bản đồ chỉ đường', 'Open navigation link')} <ExternalLink className="h-3.5 w-3.5" />
               </div>
             </a>
@@ -244,11 +244,11 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
       )}
 
       {displayHighlights && displayHighlights.length > 0 && (
-        <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+        <div className="mt-3 rounded-2xl border border-slate-100 bg-white px-3 py-3">
           <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{t('Điểm nổi bật', 'Highlights')}</div>
           <div className="mt-3 flex flex-wrap gap-2">
             {displayHighlights.map(item => (
-              <span key={item} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.06)]">
+              <span key={item} className="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
                 {item}
               </span>
             ))}

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L, { type DivIcon, type LatLngExpression, type LatLngLiteral, type Map as LeafletMap } from 'leaflet';
-import { Layers, LocateFixed, Route as RouteIcon } from 'lucide-react';
+import { Layers, LocateFixed, Route as RouteIcon, Settings2, X } from 'lucide-react';
 import { MapContainer, Marker, Polyline, ScaleControl, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import { GraphCanvasProps } from './GraphCanvas';
 import { haversineKm } from '../lib/geo';
@@ -9,6 +9,8 @@ import { TouristLocation } from '../types';
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_NO_LABELS_URL = 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
+const DARK_TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const DARK_NO_LABELS_URL = 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
 const VOYAGER_TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const VOYAGER_NO_LABELS_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png';
 const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -44,6 +46,71 @@ function getLocationLatLng(location: TouristLocation): LatLngLiteral {
   }
 
   return getFallbackLatLng(location);
+}
+
+function getAverageLatLng(latLngs: LatLngLiteral[]): LatLngLiteral {
+  if (latLngs.length === 0) {
+    return { lat: (DEFAULT_CENTER as [number, number])[0], lng: (DEFAULT_CENTER as [number, number])[1] };
+  }
+
+  return {
+    lat: latLngs.reduce((sum, location) => sum + location.lat, 0) / latLngs.length,
+    lng: latLngs.reduce((sum, location) => sum + location.lng, 0) / latLngs.length,
+  };
+}
+
+function buildPolygonLayoutPositions(locations: TouristLocation[], order: string[], startId: string): Record<string, LatLngLiteral> {
+  if (locations.length === 0) return {};
+
+  const basePositions = Object.fromEntries(locations.map(location => [location.id, getLocationLatLng(location)])) as Record<string, LatLngLiteral>;
+  const normalizedOrder = [
+    ...order.filter(id => basePositions[id]),
+    ...locations.map(location => location.id).filter(id => !order.includes(id)),
+  ];
+  const orderedIds = startId && normalizedOrder.includes(startId)
+    ? [startId, ...normalizedOrder.filter(id => id !== startId)]
+    : normalizedOrder;
+
+  const baseLatLngs = locations.map(getLocationLatLng);
+  const center = getAverageLatLng(baseLatLngs);
+  const centerLatRad = (center.lat * Math.PI) / 180;
+  const lngKmFactor = Math.max(Math.cos(centerLatRad), 0.3) * 111;
+  const spreadKm = baseLatLngs.reduce((maxDistance, position) => {
+    const latKm = (position.lat - center.lat) * 111;
+    const lngKm = (position.lng - center.lng) * lngKmFactor;
+    return Math.max(maxDistance, Math.hypot(latKm, lngKm));
+  }, 0);
+  const radiusKm = Math.max(0.85, Math.min(2.8, Math.max(spreadKm * 0.72, 0.65 + orderedIds.length * 0.22)));
+  const latRadius = radiusKm / 111;
+  const lngRadius = radiusKm / lngKmFactor;
+
+  if (orderedIds.length === 1) {
+    return {
+      [orderedIds[0]]: center,
+    };
+  }
+
+  if (orderedIds.length === 2) {
+    return {
+      [orderedIds[0]]: {
+        lat: center.lat + latRadius,
+        lng: center.lng,
+      },
+      [orderedIds[1]]: {
+        lat: center.lat - latRadius,
+        lng: center.lng,
+      },
+    };
+  }
+
+  return orderedIds.reduce<Record<string, LatLngLiteral>>((accumulator, id, index) => {
+    const angle = (-Math.PI / 2) + (index * (2 * Math.PI / orderedIds.length));
+    accumulator[id] = {
+      lat: center.lat - (Math.sin(angle) * latRadius),
+      lng: center.lng + (Math.cos(angle) * lngRadius),
+    };
+    return accumulator;
+  }, {});
 }
 
 function fitMapToLocations(map: LeafletMap, locations: TouristLocation[]) {
@@ -122,6 +189,34 @@ function createEdgeLabelIcon(
   });
 }
 
+function createOrderBadgeIcon(order: number, isStart: boolean, isEnd: boolean): DivIcon {
+  const stateClass = isStart ? 'is-start' : isEnd ? 'is-end' : '';
+  return L.divIcon({
+    className: 'map-route-order-icon',
+    html: `<div class="map-route-order ${stateClass}">${order}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+}
+
+function createFlowArrowIcon(rotationDeg: number): DivIcon {
+  return L.divIcon({
+    className: 'map-route-flow-icon',
+    html: `<div class="map-route-flow" style="transform: rotate(${rotationDeg}deg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h11" /><path d="M12 6l6 6-6 6" /></svg></div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+}
+
+function createVehicleIcon(rotationDeg: number): DivIcon {
+  return L.divIcon({
+    className: 'map-route-vehicle-icon',
+    html: `<div class="map-route-vehicle-glow"><div class="map-route-vehicle" style="transform: rotate(${rotationDeg}deg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h10" /><path d="M12 6l8 6-8 6" /></svg></div></div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+}
+
 function MapViewportSync({
   locations,
 }: {
@@ -132,7 +227,10 @@ function MapViewportSync({
 
   useEffect(() => {
     const fitKey = locations
-      .map(location => `${location.id}:${hasCoordinates(location) ? 'geo' : 'fallback'}`)
+      .map(location => {
+        const position = getLocationLatLng(location);
+        return `${location.id}:${position.lat.toFixed(5)}:${position.lng.toFixed(5)}`;
+      })
       .sort()
       .join('|');
 
@@ -190,12 +288,29 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   edgeStart,
   onEdgeStartSet,
   onAddRoute,
+  showOrderedFlow = false,
+  animatePathVehicle = false,
+  vehicleProgressOverride = null,
+  hideMapControls = false,
+  defaultShowDistanceLabels = true,
+  defaultShowMapBackground = false,
+  defaultTileTheme = 'light',
+  allowedTileThemes = ['light', 'voyager', 'street', 'dark'],
+  compactMapControls = false,
+  focusedLocationId = null,
+  onFocusedLocationScreenPositionChange,
+  displayLayoutMode = 'geo',
+  displayLayoutOrder = [],
 }) => {
   const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
   const suppressClickLocationIdRef = useRef<string | null>(null);
-  const [tileTheme, setTileTheme] = useState<'light' | 'voyager' | 'street'>('light');
-  const [showDistanceLabels, setShowDistanceLabels] = useState(true);
-  const [showMapBackground, setShowMapBackground] = useState(false);
+  const [tileTheme, setTileTheme] = useState<'light' | 'voyager' | 'street' | 'dark'>(
+    allowedTileThemes.includes(defaultTileTheme) ? defaultTileTheme : allowedTileThemes[0] ?? 'light',
+  );
+  const [showDistanceLabels, setShowDistanceLabels] = useState(defaultShowDistanceLabels);
+  const [showMapBackground, setShowMapBackground] = useState(defaultShowMapBackground);
+  const [vehicleProgress, setVehicleProgress] = useState(0);
+  const [mapControlsOpen, setMapControlsOpen] = useState(!compactMapControls);
   const [pendingRoute, setPendingRoute] = useState<{
     fromId: string;
     toId: string;
@@ -205,39 +320,181 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   const [edgeNotice, setEdgeNotice] = useState<string | null>(null);
 
   const highlightPath = highlightedPaths[activePathIndex] ?? [];
+  const orderedPath = useMemo(
+    () => (highlightPath.length > 1 && highlightPath[0] === highlightPath[highlightPath.length - 1]
+      ? highlightPath.slice(0, -1)
+      : highlightPath),
+    [highlightPath],
+  );
   const modeAccent = appMode === 'path'
     ? { edgeHalo: 'rgba(255, 241, 242, 0.98)', edgeStroke: '#e11d48', labelRing: '#fb7185', labelText: '#9f1239' }
     : appMode === 'subset'
       ? { edgeHalo: 'rgba(255, 247, 237, 0.98)', edgeStroke: '#d97706', labelRing: '#f59e0b', labelText: '#9a3412' }
       : { edgeHalo: 'rgba(236, 253, 245, 0.98)', edgeStroke: '#059669', labelRing: '#34d399', labelText: '#065f46' };
+  const hasHighlightedRoute = highlightPath.length > 1;
+  const highlightedAccent = hasHighlightedRoute
+    ? { edgeHalo: 'rgba(254, 226, 226, 0.98)', edgeStroke: '#ef4444', labelRing: '#f87171', labelText: '#b91c1c' }
+    : modeAccent;
+  const polygonLayoutActive = displayLayoutMode === 'polygon';
+  const effectiveShowMapBackground = polygonLayoutActive ? false : showMapBackground;
   const tileUrl = useMemo(() => {
+    if (tileTheme === 'dark') {
+      return effectiveShowMapBackground ? DARK_TILE_URL : DARK_NO_LABELS_URL;
+    }
     if (tileTheme === 'voyager') {
-      return showMapBackground ? VOYAGER_TILE_URL : VOYAGER_NO_LABELS_URL;
+      return effectiveShowMapBackground ? VOYAGER_TILE_URL : VOYAGER_NO_LABELS_URL;
     }
     if (tileTheme === 'street') {
-      return showMapBackground ? OSM_TILE_URL : TILE_NO_LABELS_URL;
+      return effectiveShowMapBackground ? OSM_TILE_URL : TILE_NO_LABELS_URL;
     }
-    return showMapBackground ? TILE_URL : TILE_NO_LABELS_URL;
-  }, [showMapBackground, tileTheme]);
+    return effectiveShowMapBackground ? TILE_URL : TILE_NO_LABELS_URL;
+  }, [effectiveShowMapBackground, tileTheme]);
 
-  const initialCenter = useMemo<LatLngExpression>(() => {
-    if (locations.length === 0) return DEFAULT_CENTER;
-
-    const latLngs = locations.map(getLocationLatLng);
-    const averageLat = latLngs.reduce((sum, location) => sum + location.lat, 0) / latLngs.length;
-    const averageLng = latLngs.reduce((sum, location) => sum + location.lng, 0) / latLngs.length;
-    return [averageLat, averageLng];
-  }, [locations]);
+  useEffect(() => {
+    if (!allowedTileThemes.includes(tileTheme)) {
+      setTileTheme(allowedTileThemes[0] ?? 'light');
+    }
+  }, [allowedTileThemes, tileTheme]);
 
   const locationMap = useMemo(
     () => new Map(locations.map(location => [location.id, location])),
     [locations],
   );
 
-  const locationPositions = useMemo(
-    () => Object.fromEntries(locations.map(location => [location.id, getLocationLatLng(location)])),
-    [locations],
+  const locationPositions = useMemo(() => {
+    if (displayLayoutMode === 'polygon') {
+      return buildPolygonLayoutPositions(locations, displayLayoutOrder, startId);
+    }
+
+    return Object.fromEntries(locations.map(location => [location.id, getLocationLatLng(location)])) as Record<string, LatLngLiteral>;
+  }, [displayLayoutMode, displayLayoutOrder, locations]);
+
+  const displayLocations = useMemo(
+    () => locations.map(location => {
+      const position = locationPositions[location.id] ?? getLocationLatLng(location);
+      return {
+        ...location,
+        lat: position.lat,
+        lng: position.lng,
+      };
+    }),
+    [locationPositions, locations],
   );
+
+  const initialCenter = useMemo<LatLngExpression>(() => {
+    if (displayLocations.length === 0) return DEFAULT_CENTER;
+
+    const average = getAverageLatLng(displayLocations.map(getLocationLatLng));
+    return [average.lat, average.lng];
+  }, [displayLocations]);
+
+  useEffect(() => {
+    if (!onFocusedLocationScreenPositionChange || !mapInstance || !focusedLocationId) {
+      onFocusedLocationScreenPositionChange?.(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const position = locationPositions[focusedLocationId] as LatLngLiteral | undefined;
+      if (!position) {
+        onFocusedLocationScreenPositionChange(null);
+        return;
+      }
+
+      const point = mapInstance.latLngToContainerPoint(position);
+      onFocusedLocationScreenPositionChange({ x: point.x, y: point.y });
+    };
+
+    updatePosition();
+    mapInstance.on('move zoom resize', updatePosition);
+
+    return () => {
+      mapInstance.off('move zoom resize', updatePosition);
+    };
+  }, [focusedLocationId, locationPositions, mapInstance, onFocusedLocationScreenPositionChange]);
+
+  const flowSegments = useMemo(() => {
+    if (highlightPath.length < 2) return [] as Array<{
+      fromId: string;
+      toId: string;
+      from: LatLngLiteral;
+      to: LatLngLiteral;
+      midpoint: LatLngLiteral;
+      rotationDeg: number;
+      length: number;
+      cumulativeStart: number;
+      cumulativeEnd: number;
+    }>;
+
+    const rawSegments = highlightPath.slice(0, -1).map((fromId, index) => {
+      const toId = highlightPath[index + 1];
+      const from = locationPositions[fromId] as LatLngLiteral | undefined;
+      const to = locationPositions[toId] as LatLngLiteral | undefined;
+      if (!from || !to) return null;
+
+        const fromPoint = mapInstance?.latLngToContainerPoint(from);
+        const toPoint = mapInstance?.latLngToContainerPoint(to);
+        const dx = (toPoint?.x ?? to.lng) - (fromPoint?.x ?? from.lng);
+        const dy = (toPoint?.y ?? to.lat) - (fromPoint?.y ?? from.lat);
+        const rotationDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const length = Math.max(Math.hypot(dx, dy), 0.00001);
+
+      return {
+        fromId,
+        toId,
+        from,
+        to,
+        midpoint: midpointLatLng(from, to),
+        rotationDeg,
+        length,
+      };
+    }).filter(Boolean) as Array<{
+      fromId: string;
+      toId: string;
+      from: LatLngLiteral;
+      to: LatLngLiteral;
+      midpoint: LatLngLiteral;
+      rotationDeg: number;
+      length: number;
+    }>;
+
+    const totalLength = rawSegments.reduce((sum, segment) => sum + segment.length, 0);
+    let cumulative = 0;
+    return rawSegments.map(segment => {
+      const normalizedLength = segment.length / totalLength;
+      const flowSegment = {
+        ...segment,
+        cumulativeStart: cumulative,
+        cumulativeEnd: cumulative + normalizedLength,
+      };
+      cumulative += normalizedLength;
+      return flowSegment;
+    });
+  }, [highlightPath, locationPositions, mapInstance]);
+
+  const animatedVehicle = useMemo(() => {
+    const motionEnabled = animatePathVehicle || vehicleProgressOverride !== null;
+    if (!motionEnabled || flowSegments.length === 0) return null;
+    const effectiveProgress = vehicleProgressOverride ?? vehicleProgress;
+    const activeSegment = flowSegments.find(segment => effectiveProgress <= segment.cumulativeEnd) ?? flowSegments[flowSegments.length - 1];
+    const segmentSpan = Math.max(activeSegment.cumulativeEnd - activeSegment.cumulativeStart, 0.00001);
+    const localProgress = Math.min(Math.max((effectiveProgress - activeSegment.cumulativeStart) / segmentSpan, 0), 1);
+    const basePosition = {
+      lat: activeSegment.from.lat + (activeSegment.to.lat - activeSegment.from.lat) * localProgress,
+      lng: activeSegment.from.lng + (activeSegment.to.lng - activeSegment.from.lng) * localProgress,
+    };
+    const isStoppedAtNode = vehicleProgressOverride !== null && localProgress >= 0.995;
+
+    return {
+      position: isStoppedAtNode
+        ? {
+            lat: basePosition.lat + 0.00014,
+            lng: basePosition.lng + 0.00008,
+          }
+        : basePosition,
+      rotationDeg: activeSegment.rotationDeg,
+    };
+  }, [animatePathVehicle, flowSegments, vehicleProgress, vehicleProgressOverride]);
 
   const handleRouteClick = useCallback((routeId: string) => {
     onEdgeStartSet(null);
@@ -250,6 +507,23 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
     const timerId = window.setTimeout(() => setEdgeNotice(null), 2800);
     return () => window.clearTimeout(timerId);
   }, [edgeNotice]);
+
+  useEffect(() => {
+    if (vehicleProgressOverride !== null) {
+      return;
+    }
+
+    if (!animatePathVehicle || flowSegments.length === 0) {
+      setVehicleProgress(0);
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      setVehicleProgress(current => (current >= 0.995 ? 0 : current + 0.015));
+    }, 80);
+
+    return () => window.clearInterval(timerId);
+  }, [animatePathVehicle, flowSegments, vehicleProgressOverride]);
 
   const openPendingRoute = useCallback((fromId: string, toId: string) => {
     const fromLocation = locationMap.get(fromId);
@@ -317,7 +591,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   }, [mapInstance, onLocationDrag]);
 
   return (
-    <div className={`relative h-full w-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm ${showMapBackground ? '' : 'map-background-muted'}`}>
+    <div className={`relative h-full w-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm ${effectiveShowMapBackground ? '' : 'map-background-muted'}`}>
       <MapContainer
         center={initialCenter}
         zoom={DEFAULT_ZOOM}
@@ -327,9 +601,9 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
         fadeAnimation={false}
         className="h-full w-full z-0"
       >
-        <TileLayer attribution={TILE_ATTRIBUTION} url={tileUrl} />
+        {!polygonLayoutActive && <TileLayer attribution={TILE_ATTRIBUTION} url={tileUrl} />}
         <ScaleControl position="bottomleft" metric imperial={false} />
-        <MapViewportSync locations={locations} />
+        <MapViewportSync locations={displayLocations} />
         <MapInteractionSync onMapReady={setMapInstance} onBackgroundClick={() => {
           onSelectElement(null);
           onEdgeStartSet(null);
@@ -353,8 +627,8 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               <Polyline
                 positions={[fromPosition, toPosition]}
                 pathOptions={{
-                  color: showMapBackground ? 'rgba(255,255,255,0.92)' : modeAccent.edgeHalo,
-                  weight: showMapBackground ? (isSelected ? 7 : width + 3) : (isSelected ? 8 : width + 4),
+                  color: effectiveShowMapBackground ? 'rgba(255,255,255,0.92)' : modeAccent.edgeHalo,
+                  weight: effectiveShowMapBackground ? (isSelected ? 7 : width + 3) : (isSelected ? 8 : width + 4),
                   lineCap: 'round',
                   dashArray: dashed ? '8 4' : undefined,
                 }}
@@ -368,8 +642,8 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               <Polyline
                 positions={[fromPosition, toPosition]}
                 pathOptions={{
-                  color: isSelected ? '#f59e0b' : (showMapBackground ? stroke : modeAccent.edgeStroke),
-                  weight: showMapBackground ? (isSelected ? 5 : width) : (isSelected ? 5.5 : width + 0.7),
+                  color: isSelected ? '#f59e0b' : (effectiveShowMapBackground ? stroke : highlightedAccent.edgeStroke),
+                  weight: effectiveShowMapBackground ? (isSelected ? 5 : width) : (isSelected ? 5.5 : width + 0.7),
                   dashArray: dashed ? '8 4' : undefined,
                   lineCap: 'round',
                   opacity: isSelected ? 1 : 0.95,
@@ -379,13 +653,39 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               {showDistanceLabels && (
                 <Marker
                   position={midpoint}
-                  icon={createEdgeLabelIcon(route.distanceKm, isSelected, modeAccent.labelRing, modeAccent.labelText, !showMapBackground)}
+                  icon={createEdgeLabelIcon(route.distanceKm, isSelected, highlightedAccent.labelRing, highlightedAccent.labelText, !effectiveShowMapBackground)}
                   interactive={false}
                   keyboard={false}
                   zIndexOffset={100}
                 />
               )}
             </React.Fragment>
+          );
+        })}
+
+        {showOrderedFlow && flowSegments.map((segment, index) => (
+          <Marker
+            key={`flow-${segment.fromId}-${segment.toId}-${index}`}
+            position={segment.midpoint}
+            icon={createFlowArrowIcon(segment.rotationDeg)}
+            interactive={false}
+            keyboard={false}
+            zIndexOffset={520}
+          />
+        ))}
+
+        {showOrderedFlow && orderedPath.map((locationId, index) => {
+          const position = locationPositions[locationId] as LatLngLiteral | undefined;
+          if (!position) return null;
+          return (
+            <Marker
+              key={`order-${locationId}-${index}`}
+              position={position}
+              icon={createOrderBadgeIcon(index + 1, index === 0, appMode === 'path' && index === orderedPath.length - 1)}
+              interactive={false}
+              keyboard={false}
+              zIndexOffset={650}
+            />
           );
         })}
 
@@ -452,9 +752,19 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
             </Marker>
           );
         })}
+
+        {animatedVehicle && (
+          <Marker
+            position={animatedVehicle.position}
+            icon={createVehicleIcon(animatedVehicle.rotationDeg)}
+            interactive={false}
+            keyboard={false}
+            zIndexOffset={5000}
+          />
+        )}
       </MapContainer>
 
-      <div className={`pointer-events-none absolute inset-0 z-[350] ${showMapBackground ? 'bg-[linear-gradient(180deg,rgba(255,255,255,0.22),rgba(255,255,255,0.14))]' : 'bg-[linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0.22))]'}`} />
+      <div className={`pointer-events-none absolute inset-0 z-[350] ${effectiveShowMapBackground ? 'bg-[linear-gradient(180deg,rgba(255,255,255,0.22),rgba(255,255,255,0.14))]' : 'bg-[linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0.22))]'}`} />
 
       {uiMode === 'edit' && (
         <div className="absolute bottom-3 left-3 z-[520] max-w-sm rounded-2xl border border-white/70 bg-white/94 px-4 py-3 text-xs leading-6 text-slate-600 shadow-[0_16px_34px_rgba(15,23,42,0.16)] backdrop-blur">
@@ -508,38 +818,66 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
         </div>
       )}
 
-      <div className="absolute right-3 top-3 z-[500] w-56 rounded-2xl border border-white/70 bg-white/92 p-3 shadow-[0_16px_34px_rgba(15,23,42,0.16)] backdrop-blur">
+      {!hideMapControls && (
+        <>
+        {compactMapControls && (
+          <button
+            type="button"
+            onClick={() => setMapControlsOpen(current => !current)}
+            className="absolute right-3 top-3 z-[500] inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/92 px-4 py-2 text-sm font-semibold text-slate-800 shadow-[0_14px_26px_rgba(15,23,42,0.14)] backdrop-blur hover:bg-white"
+            title="Cài đặt bản đồ"
+          >
+            {mapControlsOpen ? <X className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />} Cài đặt
+          </button>
+        )}
+        {mapControlsOpen && (
+        <div className={`absolute right-3 ${compactMapControls ? 'top-16' : 'top-3'} z-[500] w-56 rounded-2xl border border-white/70 bg-white/92 p-3 shadow-[0_16px_34px_rgba(15,23,42,0.16)] backdrop-blur`}>
         <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Bản đồ nâng cao</div>
         <div className="mt-2 text-sm font-bold text-slate-900">Điều khiển hiển thị</div>
 
         <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-1">
-          <button
-            type="button"
-            onClick={() => setTileTheme('light')}
-            className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'light' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-          >
-            Sáng
-          </button>
-          <button
-            type="button"
-            onClick={() => setTileTheme('voyager')}
-            className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'voyager' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-          >
-            Voyager
-          </button>
-          <button
-            type="button"
-            onClick={() => setTileTheme('street')}
-            className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'street' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-          >
-            Street
-          </button>
+          {allowedTileThemes.includes('light') && (
+            <button
+              type="button"
+              onClick={() => setTileTheme('light')}
+              className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'light' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+            >
+              Sáng
+            </button>
+          )}
+          {allowedTileThemes.includes('voyager') && (
+            <button
+              type="button"
+              onClick={() => setTileTheme('voyager')}
+              className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'voyager' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+            >
+              Màu
+            </button>
+          )}
+          {allowedTileThemes.includes('street') && (
+            <button
+              type="button"
+              onClick={() => setTileTheme('street')}
+              className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'street' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+            >
+              Street
+            </button>
+          )}
+          {allowedTileThemes.includes('dark') && (
+            <button
+              type="button"
+              onClick={() => setTileTheme('dark')}
+              className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'dark' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+            >
+              Tối
+            </button>
+          )}
         </div>
 
         <div className="mt-3 space-y-2">
           <button
             type="button"
-            onClick={() => mapInstance && fitMapToLocations(mapInstance, locations)}
+            onClick={() => mapInstance && fitMapToLocations(mapInstance, displayLocations)}
             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             <span className="inline-flex items-center gap-2"><LocateFixed className="h-4 w-4" /> Căn lại khung nhìn</span>
@@ -556,10 +894,11 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
           <button
             type="button"
             onClick={() => setShowMapBackground(current => !current)}
-            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            disabled={polygonLayoutActive}
+            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="inline-flex items-center gap-2"><Layers className="h-4 w-4" /> Nền map</span>
-            <span className="text-[11px] text-slate-400">{showMapBackground ? 'Bật' : 'Tắt'}</span>
+            <span className="text-[11px] text-slate-400">{polygonLayoutActive ? 'Ẩn trong Dễ nhìn' : (effectiveShowMapBackground ? 'Bật' : 'Tắt')}</span>
           </button>
         </div>
 
@@ -567,7 +906,10 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
           <div className="inline-flex items-center gap-1.5 font-semibold text-slate-700"><Layers className="h-3.5 w-3.5" /> Cơ chế nâng cao</div>
           <div className="mt-1">Đổi kiểu nền, bật hoặc tắt nền map và tô nhấn khác nhau theo từng bài để dữ liệu nổi bật hơn.</div>
         </div>
-      </div>
+        </div>
+        )}
+        </>
+      )}
     </div>
   );
 };

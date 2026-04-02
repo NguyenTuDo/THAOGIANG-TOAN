@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Expand, ExternalLink, PencilLine, Plus, Trash2, X } from 'lucide-react';
+import { Expand, ExternalLink, GripVertical, PencilLine, Plus, Trash2, X } from 'lucide-react';
 import { AppMode, GraphData, PresetSelectionMap, Route, SelectedElement, TouristLocation } from '../types';
 import { MapCanvas } from './MapCanvas';
 import { projectGeoLocationsToCanvas, syncLocationsToProjectedCanvas } from '../lib/geoProjection';
@@ -10,6 +10,7 @@ interface AdminDashboardProps {
   presets: PresetSelectionMap;
   onSaveLocation: (location: TouristLocation) => Promise<void>;
   onDeleteLocation: (locationId: string) => Promise<void>;
+  onSaveLocationOrder: (locationIds: string[]) => Promise<void>;
   onSaveRoute: (route: Route) => Promise<void>;
   onDeleteRoute: (routeId: string) => Promise<void>;
   onSavePreset: (mode: AppMode, ids: string[]) => Promise<void>;
@@ -65,6 +66,21 @@ const CATEGORY_OPTIONS: TouristLocation['category'][] = [
   'Khách sạn',
 ];
 
+const POSITION_AUTOSAVE_DELAY_MS = 1200;
+
+type LocalPositionDraft = {
+  x: number;
+  y: number;
+  lat?: number;
+  lng?: number;
+  source: 'map' | 'graph';
+};
+
+function isSameLocalPosition(a?: LocalPositionDraft, b?: LocalPositionDraft) {
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.lat === b.lat && a.lng === b.lng && a.source === b.source;
+}
+
 function buildRouteId(from: string, to: string) {
   return [from, to].sort().join('__');
 }
@@ -74,6 +90,7 @@ export function AdminDashboard({
   presets,
   onSaveLocation,
   onDeleteLocation,
+  onSaveLocationOrder,
   onSaveRoute,
   onDeleteRoute,
   onSavePreset,
@@ -87,29 +104,32 @@ export function AdminDashboard({
   const [status, setStatus] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'success' | 'error'>('success');
   const [saving, setSaving] = useState(false);
+  const [savingPositions, setSavingPositions] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [edgeStart, setEdgeStart] = useState<string | null>(null);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
+  const [draggedLocationId, setDraggedLocationId] = useState<string | null>(null);
+  const [dragOverLocation, setDragOverLocation] = useState<{ id: string; position: 'before' | 'after' } | null>(null);
+  const localPositionsRef = useRef<Record<string, LocalPositionDraft>>({});
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Local canvas positions: updated instantly on drag, saved to Supabase with debounce
-  const [localPositions, setLocalPositions] = useState<Record<string, {
-    x: number;
-    y: number;
-    lat?: number;
-    lng?: number;
-    source: 'map' | 'graph';
-  }>>({});
+  // Local canvas positions: updated instantly on drag, then persisted after a short idle delay.
+  const [localPositions, setLocalPositions] = useState<Record<string, LocalPositionDraft>>({});
   const hasPendingPositions = Object.keys(localPositions).length > 0;
 
-  const handleSavePositions = async () => {
-    if (!hasPendingPositions) return;
-    setSaving(true);
+  const persistPositions = useCallback(async (
+    positionsToSave: Record<string, LocalPositionDraft>,
+    options?: { showSuccessMessage?: boolean }
+  ) => {
+    if (Object.keys(positionsToSave).length === 0) return;
+
+    setSavingPositions(true);
     try {
       const mergedLocations = graphData.locations.map(location => {
-        const local = localPositions[location.id];
+        const local = positionsToSave[location.id];
         return local
           ? {
               ...location,
@@ -121,12 +141,12 @@ export function AdminDashboard({
           : location;
       });
       const projectedPositions = projectGeoLocationsToCanvas(mergedLocations);
-      const hasMapChanges = Object.values(localPositions).some(position => position.source === 'map');
+      const hasMapChanges = Object.values(positionsToSave).some(position => position.source === 'map');
 
-      const locationsToPersist = hasMapChanges ? mergedLocations : mergedLocations.filter(location => localPositions[location.id]);
+      const locationsToPersist = hasMapChanges ? mergedLocations : mergedLocations.filter(location => positionsToSave[location.id]);
 
       for (const location of locationsToPersist) {
-        const local = localPositions[location.id];
+        const local = positionsToSave[location.id];
         const projected = projectedPositions[location.id];
         await onSaveLocation({
           ...location,
@@ -136,20 +156,44 @@ export function AdminDashboard({
           lng: local?.lng ?? location.lng,
         });
       }
-      setLocalPositions({});
-      showSuccess('Đã lưu vị trí các điểm trên bản đồ và đồ thị.');
+
+      setLocalPositions(current => {
+        const next = { ...current };
+        for (const [id, savedPosition] of Object.entries(positionsToSave)) {
+          if (isSameLocalPosition(current[id], savedPosition)) {
+            delete next[id];
+          }
+        }
+        return next;
+      });
+
+      if (options?.showSuccessMessage) {
+        showSuccess('Đã lưu vị trí các điểm trên bản đồ và đồ thị.');
+      }
     } catch (error) {
       showError(error);
     } finally {
-      setSaving(false);
+      setSavingPositions(false);
     }
-  };
+  }, [graphData.locations, onSaveLocation]);
+
+  const handleSavePositions = useCallback(async (options?: { showSuccessMessage?: boolean }) => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    const positionsSnapshot = localPositionsRef.current;
+    if (Object.keys(positionsSnapshot).length === 0) return;
+    await persistPositions(positionsSnapshot, options);
+  }, [persistPositions]);
 
   const allLocationIds = useMemo(() => graphData.locations.map(location => location.id), [graphData.locations]);
   const selectedRoute = useMemo(() => {
     if (selectedElement?.type !== 'route') return null;
     return graphData.routes.find(route => route.id === selectedElement.id) ?? null;
   }, [graphData.routes, selectedElement]);
+  const orderedLocations = useMemo(() => graphData.locations, [graphData.locations]);
 
   // Canvas locations = Supabase data + in-flight drag overrides + auto-spread if all at default
   const canvasLocations = useMemo(() => {
@@ -209,6 +253,30 @@ export function AdminDashboard({
   }, [graphData.routes]);
 
   useEffect(() => {
+    localPositionsRef.current = localPositions;
+  }, [localPositions]);
+
+  useEffect(() => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    if (!hasPendingPositions || savingPositions) return;
+
+    autosaveTimerRef.current = setTimeout(() => {
+      void handleSavePositions();
+    }, POSITION_AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [hasPendingPositions, localPositions, savingPositions, handleSavePositions]);
+
+  useEffect(() => {
     if (!selectedElement) return;
 
     if (selectedElement.type === 'route' && !graphData.routes.some(route => route.id === selectedElement.id)) {
@@ -248,7 +316,7 @@ export function AdminDashboard({
     const rawMessage = error instanceof Error ? error.message : 'Không thể lưu dữ liệu.';
     const missingColumnKeywords = [
       'googleMapsUrl', 'fullNameEn', 'descriptionEn', 'shortIntroEn',
-      'neighborhoodEn', 'bestForEn', 'highlightsEn',
+      'neighborhoodEn', 'bestForEn', 'highlightsEn', 'displayOrder',
     ];
     const friendlyMessage = missingColumnKeywords.some(col => rawMessage.includes(col))
       ? 'Supabase đang thiếu cột. Vào SUPABASE_SETUP.md → Bước 2b và chạy SQL nâng cấp schema.'
@@ -373,7 +441,7 @@ export function AdminDashboard({
     }
   };
 
-  // Instant visual update — saved to Supabase only when admin clicks "Lưu vị trí".
+  // Instant visual update — persisted after a short idle delay to keep dragging smooth.
   // Wrapped in useCallback so GraphCanvas gets a stable prop reference and doesn't
   // recreate handleNodeMouseDown (which has onLocationDrag in its deps) mid-drag.
   const handleCanvasMoveLocation = useCallback((id: string, x: number, y: number, geo?: { lat: number; lng: number }) => {
@@ -387,6 +455,72 @@ export function AdminDashboard({
         source: geo ? 'map' : 'graph',
       },
     }));
+  }, []);
+
+  const persistDraggedLocationOrder = useCallback(async (draggedId: string, targetId: string, position: 'before' | 'after') => {
+    if (draggedId === targetId) return;
+
+    const nextLocations = [...orderedLocations];
+    const draggedIndex = nextLocations.findIndex(location => location.id === draggedId);
+    const targetIndex = nextLocations.findIndex(location => location.id === targetId);
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const [movedLocation] = nextLocations.splice(draggedIndex, 1);
+    const adjustedTargetIndex = nextLocations.findIndex(location => location.id === targetId);
+    const insertIndex = position === 'before' ? adjustedTargetIndex : adjustedTargetIndex + 1;
+    nextLocations.splice(insertIndex, 0, movedLocation);
+
+    setSaving(true);
+    setStatus(null);
+    try {
+      await onSaveLocationOrder(nextLocations.map(location => location.id));
+      showSuccess(`Đã cập nhật thứ tự hiển thị của ${movedLocation.fullName}.`);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setSaving(false);
+      setDraggedLocationId(null);
+      setDragOverLocation(null);
+    }
+  }, [onSaveLocationOrder, orderedLocations]);
+
+  const handleLocationDragStart = useCallback((event: React.DragEvent<HTMLButtonElement>, locationId: string) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', locationId);
+    setDraggedLocationId(locationId);
+  }, []);
+
+  const handleLocationDragOver = useCallback((event: React.DragEvent<HTMLDivElement>, locationId: string) => {
+    if (!draggedLocationId || draggedLocationId === locationId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const position = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+    setDragOverLocation(current => (
+      current?.id === locationId && current.position === position
+        ? current
+        : { id: locationId, position }
+    ));
+  }, [draggedLocationId]);
+
+  const handleLocationDrop = useCallback((event: React.DragEvent<HTMLDivElement>, locationId: string) => {
+    event.preventDefault();
+    const draggedId = event.dataTransfer.getData('text/plain') || draggedLocationId;
+    if (!draggedId || draggedId === locationId) {
+      setDraggedLocationId(null);
+      setDragOverLocation(null);
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const position = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+    void persistDraggedLocationOrder(draggedId, locationId, position);
+  }, [draggedLocationId, persistDraggedLocationOrder]);
+
+  const handleLocationDragEnd = useCallback(() => {
+    setDraggedLocationId(null);
+    setDragOverLocation(null);
   }, []);
 
   return (
@@ -452,7 +586,9 @@ export function AdminDashboard({
             <div className="flex items-center gap-2 shrink-0">
               {hasPendingPositions && (
                 <span className="text-xs text-amber-600 font-medium">
-                  {Object.keys(localPositions).length} điểm chưa lưu
+                  {savingPositions
+                    ? 'Đang tự lưu vị trí...'
+                    : `${Object.keys(localPositions).length} điểm chờ tự lưu`}
                 </span>
               )}
               <button
@@ -464,11 +600,11 @@ export function AdminDashboard({
               </button>
               <button
                 type="button"
-                disabled={!hasPendingPositions || saving}
-                onClick={() => void handleSavePositions()}
+                disabled={!hasPendingPositions || savingPositions}
+                onClick={() => void handleSavePositions({ showSuccessMessage: true })}
                 className="inline-flex items-center gap-1.5 rounded-full bg-[#14342b] px-4 py-2 text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {saving ? 'Đang lưu…' : 'Lưu vị trí'}
+                {savingPositions ? 'Đang lưu…' : 'Lưu ngay'}
               </button>
             </div>
           </div>
@@ -521,8 +657,8 @@ export function AdminDashboard({
                       setSaving(false);
                     }
                   }}
-                  onSavePositions={selectedLocationHasPendingPosition ? () => void handleSavePositions() : undefined}
-                  saving={saving}
+                  onSavePositions={selectedLocationHasPendingPosition ? () => void handleSavePositions({ showSuccessMessage: true }) : undefined}
+                  saving={saving || savingPositions}
                 />
               )}
               {selectedRoute && (
@@ -629,8 +765,8 @@ export function AdminDashboard({
                       setSaving(false);
                     }
                   }}
-                  onSavePositions={selectedLocationHasPendingPosition ? () => void handleSavePositions() : undefined}
-                  saving={saving}
+                  onSavePositions={selectedLocationHasPendingPosition ? () => void handleSavePositions({ showSuccessMessage: true }) : undefined}
+                  saving={saving || savingPositions}
                 />
               )}
               {selectedRoute && (
@@ -686,7 +822,7 @@ export function AdminDashboard({
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <div className="text-xl font-black text-slate-900">Danh sách địa điểm</div>
-              <div className="mt-1 text-sm text-slate-500">Thêm mới hoặc bấm sửa để mở modal chỉnh nội dung.</div>
+              <div className="mt-1 text-sm text-slate-500">Kéo tay nắm ở đầu mỗi dòng để đổi thứ tự. Thứ tự này sẽ đồng bộ sang giao diện chính ngay.</div>
             </div>
             <button
               type="button"
@@ -697,18 +833,46 @@ export function AdminDashboard({
               Thêm địa điểm
             </button>
           </div>
-          <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
-            {graphData.locations.length === 0 ? (
+          <div className="max-h-[820px] space-y-3 overflow-y-auto pr-1 xl:max-h-[calc(100vh-12rem)]">
+            {orderedLocations.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-600">
                 Chưa có địa điểm nào trong hệ thống. Thầy có thể bấm <strong>Thêm địa điểm</strong> để nhập mới, hoặc dùng nút
                 <strong> Nạp dữ liệu mẫu vào hệ thống</strong> ở phía trên.
               </div>
             ) : (
-              graphData.locations.map(location => (
-                <div key={location.id} className="rounded-2xl border border-slate-100 px-4 py-4">
+              orderedLocations.map((location, index) => (
+                <div
+                  key={location.id}
+                  onDragOver={handleLocationDragOver ? event => handleLocationDragOver(event, location.id) : undefined}
+                  onDrop={event => handleLocationDrop(event, location.id)}
+                  onDragLeave={() => {
+                    if (dragOverLocation?.id === location.id) {
+                      setDragOverLocation(null);
+                    }
+                  }}
+                  className={`rounded-2xl border px-4 py-4 transition ${draggedLocationId === location.id ? 'border-dashed border-emerald-300 bg-emerald-50/50 opacity-70' : 'border-slate-100'} ${dragOverLocation?.id === location.id ? 'border-emerald-300 bg-emerald-50/40' : ''}`}
+                >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold text-slate-900">{location.fullName}</div>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <button
+                        type="button"
+                        draggable={!saving}
+                        title={`Kéo để đổi vị trí của ${location.fullName}`}
+                        aria-label={`Kéo để đổi vị trí của ${location.fullName}`}
+                        onDragStart={event => handleLocationDragStart(event, location.id)}
+                        onDragEnd={handleLocationDragEnd}
+                        className="mt-0.5 inline-flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={saving}
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </button>
+                      <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                        <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-100 px-2 text-[11px] font-black text-slate-600">
+                          {index + 1}
+                        </span>
+                        <span>{location.fullName}</span>
+                      </div>
                       <div className="mt-1 text-xs text-slate-500">
                         {location.id} • {location.category} • ({location.x}, {location.y})
                         {typeof location.lat === 'number' && typeof location.lng === 'number'
@@ -721,8 +885,14 @@ export function AdminDashboard({
                           Mở Google Maps
                         </a>
                       )}
+                      {dragOverLocation?.id === location.id && draggedLocationId !== location.id && (
+                        <div className="mt-2 text-[11px] font-semibold text-emerald-700">
+                          {dragOverLocation.position === 'before' ? 'Thả vào trước địa điểm này' : 'Thả vào sau địa điểm này'}
+                        </div>
+                      )}
+                      </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       <button type="button" onClick={() => openEditLocationModal(location)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
                         <span className="inline-flex items-center gap-1"><PencilLine className="h-3.5 w-3.5" /> Sửa</span>
                       </button>
@@ -848,13 +1018,11 @@ export function AdminDashboard({
       {locationModalOpen && (
         <ModalShell title={locationForm.id ? `Sửa địa điểm ${locationForm.id}` : 'Thêm địa điểm mới'} onClose={() => setLocationModalOpen(false)}>
           <form onSubmit={handleLocationSubmit} className="space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-              Các trường nên nhập: <strong>mã</strong>, <strong>tên</strong>, <strong>danh mục</strong>, <strong>mô tả ngắn</strong>,
-              <strong> hình ảnh</strong>, <strong>Google Maps</strong> và <strong>điểm nhấn</strong>. Tọa độ sẽ được đặt ở bảng trực quan
-              rồi lưu xuống Supabase sau. Có thể bỏ qua bản tiếng Anh nếu chưa cần.
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                Thông tin địa danh
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
               <Field label="Mã địa điểm">
                 <input value={locationForm.id} placeholder="Ví dụ: DS" onChange={event => setLocationForm(current => ({ ...current, id: event.target.value }))} className="field-input" />
               </Field>
@@ -881,6 +1049,16 @@ export function AdminDashboard({
               <Field label="Khu vực (EN)">
                 <input value={locationForm.neighborhoodEn ?? ''} placeholder="Example: Paris Commune Square, District 1" onChange={event => setLocationForm(current => ({ ...current, neighborhoodEn: event.target.value }))} className="field-input" />
               </Field>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+              Các trường nên nhập: <strong>mã</strong>, <strong>tên</strong>, <strong>danh mục</strong>, <strong>mô tả ngắn</strong>,
+              <strong> hình ảnh</strong>, <strong>Google Maps</strong> và <strong>điểm nhấn</strong>. Tọa độ sẽ được đặt ở bảng trực quan
+              rồi lưu xuống Supabase sau. Có thể bỏ qua bản tiếng Anh nếu chưa cần.
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
               {/* Multi-image carousel */}
               <div className="md:col-span-2 space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Ảnh địa điểm (carousel — ảnh đầu tiên là ảnh chính)</div>
@@ -1107,8 +1285,10 @@ function ModalShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/20 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.3)]">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div className="text-xl font-black text-slate-900">{title}</div>
@@ -1120,7 +1300,8 @@ function ModalShell({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

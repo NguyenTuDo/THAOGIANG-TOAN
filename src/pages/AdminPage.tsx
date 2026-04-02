@@ -10,6 +10,7 @@ import {
   loadGraphData,
   loadPresets,
   saveLocation,
+  saveLocationOrder,
   savePreset,
   saveRoute,
 } from '../lib/dataStore';
@@ -52,6 +53,20 @@ export function AdminPage() {
     await deleteLocation(locationId);
     await refreshData();
   }, [refreshData]);
+
+  const handleSaveLocationOrder = useCallback(async (locationIds: string[]) => {
+    setGraphData(current => ({
+      ...current,
+      locations: locationIds
+        .map(id => current.locations.find(location => location.id === id))
+        .filter((location): location is GraphData['locations'][number] => Boolean(location))
+        .map((location, index) => ({
+          ...location,
+          displayOrder: index,
+        })),
+    }));
+    await saveLocationOrder(locationIds);
+  }, []);
 
   const handleSaveRoute = useCallback(async (route: GraphData['routes'][number]) => {
     await saveRoute(route);
@@ -122,6 +137,14 @@ export function AdminPage() {
               Về trang cẩm nang
             </Link>
           </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              to="/admin/algorithms"
+              className="inline-flex items-center gap-2 rounded-full bg-[#14342b] px-4 py-2 text-sm font-bold text-white"
+            >
+              Kiểm tra 3 bài toán ở route riêng
+            </Link>
+          </div>
         </header>
 
         {loading ? (
@@ -147,6 +170,7 @@ export function AdminPage() {
                 presets={presets}
                 onSaveLocation={handleSaveLocation}
                 onDeleteLocation={handleDeleteLocation}
+                onSaveLocationOrder={handleSaveLocationOrder}
                 onSaveRoute={handleSaveRoute}
                 onDeleteRoute={handleDeleteRoute}
                 onSavePreset={handleSavePreset}

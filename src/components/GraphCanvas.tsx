@@ -37,6 +37,19 @@ export interface GraphCanvasProps {
   edgeStart: string | null;
   onEdgeStartSet: (id: string | null) => void;
   onAddRoute: (from: string, to: string, distanceKm: number) => void;
+  showOrderedFlow?: boolean;
+  animatePathVehicle?: boolean;
+  vehicleProgressOverride?: number | null;
+  hideMapControls?: boolean;
+  defaultShowDistanceLabels?: boolean;
+  defaultShowMapBackground?: boolean;
+  defaultTileTheme?: 'light' | 'voyager' | 'street' | 'dark';
+  allowedTileThemes?: Array<'light' | 'voyager' | 'street' | 'dark'>;
+  compactMapControls?: boolean;
+  focusedLocationId?: string | null;
+  onFocusedLocationScreenPositionChange?: (position: { x: number; y: number } | null) => void;
+  displayLayoutMode?: 'geo' | 'polygon';
+  displayLayoutOrder?: string[];
 }
 
 

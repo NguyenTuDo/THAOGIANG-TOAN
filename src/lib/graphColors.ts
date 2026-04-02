@@ -64,7 +64,7 @@ export function getEdgeColor(
         (highlightPath[i] === from && highlightPath[i+1] === to) ||
         (highlightPath[i] === to && highlightPath[i+1] === from)
       ) {
-        return { stroke: '#10b981', width: 3.5, dashed: true };
+        return { stroke: '#ef4444', width: 4.5, dashed: false };
       }
     }
   }

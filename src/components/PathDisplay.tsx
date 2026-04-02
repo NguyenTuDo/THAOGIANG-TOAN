@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, RotateCcw, ShieldCheck } from 'lucide-react';
+import { ArrowRight, MapPinned, RotateCcw } from 'lucide-react';
 import { TouristLocation, AppMode } from '../types';
 
 interface PathDisplayProps {
@@ -28,35 +28,56 @@ export const PathDisplay: React.FC<PathDisplayProps> = ({ path, totalKm, locatio
 
   const color = appMode === 'cycle' ? 'emerald' : appMode === 'path' ? 'rose' : 'amber';
   const colorMap = {
-    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', chip: 'bg-emerald-600', chipLight: 'bg-emerald-100 text-emerald-800', arrow: 'text-emerald-400', ring: 'ring-emerald-300' },
-    rose:    { bg: 'bg-rose-50',    border: 'border-rose-200',    text: 'text-rose-700',    chip: 'bg-rose-600',    chipLight: 'bg-rose-100 text-rose-800',    arrow: 'text-rose-400',    ring: 'ring-rose-300' },
-    amber:   { bg: 'bg-amber-50',   border: 'border-amber-200',   text: 'text-amber-700',   chip: 'bg-amber-600',   chipLight: 'bg-amber-100 text-amber-800',   arrow: 'text-amber-400',   ring: 'ring-amber-300' },
+    emerald: {
+      shell: 'border-emerald-200 bg-[linear-gradient(180deg,#f3fbf7_0%,#edf8f2_100%)]',
+      text: 'text-emerald-800',
+      subtext: 'text-emerald-700',
+      pill: 'bg-emerald-600 text-white',
+      pillSoft: 'bg-emerald-100 text-emerald-800',
+      arrow: 'text-emerald-500',
+      number: 'bg-emerald-800 text-white',
+    },
+    rose: {
+      shell: 'border-rose-200 bg-[linear-gradient(180deg,#fff1f4_0%,#ffe7ee_100%)]',
+      text: 'text-rose-800',
+      subtext: 'text-rose-700',
+      pill: 'bg-rose-600 text-white',
+      pillSoft: 'bg-rose-100 text-rose-800',
+      arrow: 'text-rose-500',
+      number: 'bg-rose-800 text-white',
+    },
+    amber: {
+      shell: 'border-amber-200 bg-[linear-gradient(180deg,#fff8ea_0%,#ffefd5_100%)]',
+      text: 'text-amber-800',
+      subtext: 'text-amber-700',
+      pill: 'bg-amber-600 text-white',
+      pillSoft: 'bg-amber-100 text-amber-800',
+      arrow: 'text-amber-500',
+      number: 'bg-amber-800 text-white',
+    },
   };
   const c = colorMap[color];
+  const title = isCycle ? 'Chu trình tối ưu' : 'Đường đi tối ưu';
 
   return (
-    <div className={`${c.bg} border ${c.border} rounded-xl p-3 space-y-2`}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className={`text-xs font-bold ${c.text}`}>
-          {isCycle ? '🔄 Chu trình tối ưu' : '🗺️ Đường đi tối ưu'}
-        </span>
-        <span className={`text-lg font-black ${c.text}`}>{totalKm.toFixed(1)} km</span>
+    <div className={`rounded-[22px] border p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)] ${c.shell}`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className={`inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] ${c.subtext}`}>
+            <MapPinned className="h-3.5 w-3.5" />
+            {title}
+          </div>
+          <div className="mt-1 text-sm font-semibold text-slate-600">{uniqueVisited.length} điểm</div>
+        </div>
+        <div className="text-right">
+          <div className={`text-[11px] font-bold uppercase tracking-[0.18em] ${c.subtext}`}>Tổng quãng đường</div>
+          <div className={`mt-1 text-3xl font-black leading-none ${c.text}`}>{totalKm.toFixed(1)} km</div>
+        </div>
       </div>
 
-      {/* ⭐ Ràng buộc: mỗi điểm 1 lần */}
-      <div className="flex items-center gap-1.5 bg-white/70 rounded-lg px-2 py-1">
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-        <span className="text-[10px] font-bold text-emerald-700">
-          {uniqueVisited.length} điểm — mỗi điểm thăm đúng 1 lần
-        </span>
-        {isCycle && (
-          <span className="text-[10px] text-slate-500 ml-auto">↩ cuối cùng chỉ khép vòng về điểm đầu</span>
-        )}
-      </div>
-
-      {/* Path chips with visit order numbers */}
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="mt-4 rounded-[20px] border border-white/80 bg-white/80 p-3">
+        <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Thứ tự lộ trình</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
         {uniqueVisited.map((nodeId, idx) => {
           const isLastUnique = idx === uniqueVisited.length - 1;
 
@@ -64,22 +85,24 @@ export const PathDisplay: React.FC<PathDisplayProps> = ({ path, totalKm, locatio
             <React.Fragment key={`${nodeId}-${idx}`}>
               <div
                 title={getName(nodeId)}
-                className={`flex items-center gap-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md cursor-default ${c.chip}`}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-2 shadow-[0_6px_14px_rgba(15,23,42,0.06)] ${c.pill}`}
               >
-                <span className="opacity-70 text-[9px]">{idx + 1}.</span>
-                <span>{getShort(nodeId)}</span>
+                <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[10px] font-black ${c.number}`}>
+                  {idx + 1}
+                </span>
+                <span className="text-sm font-bold leading-none">{getShort(nodeId)}</span>
               </div>
               {idx < uniqueVisited.length - 1 && (
-                <ArrowRight className={`w-3 h-3 ${c.arrow} shrink-0`} />
+                <ArrowRight className={`h-4 w-4 shrink-0 ${c.arrow}`} />
               )}
               {isCycle && isLastUnique && (
                 <>
-                  <ArrowRight className={`w-3 h-3 ${c.arrow} shrink-0`} />
+                  <ArrowRight className={`h-4 w-4 shrink-0 ${c.arrow}`} />
                   <div
                     title={getName(uniqueVisited[0])}
-                    className="flex items-center gap-1 rounded-md bg-slate-400 px-1.5 py-0.5 text-[10px] font-bold text-white ring-1 ring-slate-300"
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold shadow-[0_6px_14px_rgba(15,23,42,0.06)] ${c.pillSoft}`}
                   >
-                    <span>↩</span>
+                    <span className="text-base leading-none">↩</span>
                     <span>{getShort(uniqueVisited[0])}</span>
                   </div>
                 </>
@@ -88,11 +111,12 @@ export const PathDisplay: React.FC<PathDisplayProps> = ({ path, totalKm, locatio
           );
         })}
       </div>
+      </div>
 
       {allCount > 1 && (
-        <div className={`text-[10px] ${c.text} flex items-center gap-1`}>
-          <RotateCcw className="w-3 h-3" />
-          {allCount} lộ trình cùng độ dài — luân phiên hiển thị
+        <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold ${c.pillSoft}`}>
+          <RotateCcw className="h-3.5 w-3.5" />
+          {allCount} phương án tối ưu cùng độ dài
         </div>
       )}
     </div>

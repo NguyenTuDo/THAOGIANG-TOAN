@@ -12,6 +12,7 @@ export type LocationCategory =
 export interface TouristLocation {
   id: string;          // viết tắt 2-3 ký tự, VD: "BT"
   label: string;       // hiển thị ngắn trong node circle
+  displayOrder?: number; // thứ tự hiển thị trong danh sách và giao diện chính
   fullName: string;    // tên đầy đủ tiếng Việt
   fullNameEn?: string; // English full name
   category: LocationCategory;

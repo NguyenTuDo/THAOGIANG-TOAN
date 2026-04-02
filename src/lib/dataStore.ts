@@ -1,6 +1,8 @@
 import { AppMode, GraphData, PresetSelectionMap, Route, TouristLocation } from '../types';
 import { getSupabase, hasSupabaseConfig } from './supabase';
 
+export const TOURIST_DATA_CHANGED_EVENT = 'tourist-data-changed';
+
 const STORAGE_KEYS = {
   locations: 'tourist.locations',
   routes: 'tourist.routes',
@@ -16,22 +18,56 @@ const EMPTY_PRESETS: PresetSelectionMap = {
   subset: { ids: [], label: '', desc: '' },
 };
 
+function sortLocations(locations: TouristLocation[]): TouristLocation[] {
+  return [...locations].sort((a, b) => {
+    const orderA = typeof a.displayOrder === 'number' ? a.displayOrder : Number.MAX_SAFE_INTEGER;
+    const orderB = typeof b.displayOrder === 'number' ? b.displayOrder : Number.MAX_SAFE_INTEGER;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.fullName.localeCompare(b.fullName);
+  });
+}
+
+function normalizeLocations(locations: TouristLocation[]): TouristLocation[] {
+  return sortLocations(
+    locations.map((location, index) => ({
+      ...location,
+      displayOrder: typeof location.displayOrder === 'number' ? location.displayOrder : index,
+    })),
+  );
+}
+
+function normalizeGraphData(graphData: GraphData): GraphData {
+  return {
+    locations: normalizeLocations(graphData.locations),
+    routes: [...graphData.routes].sort((a, b) => a.id.localeCompare(b.id)),
+  };
+}
+
+function emitTouristDataChanged() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(TOURIST_DATA_CHANGED_EVENT));
+}
+
 function readLocalGraphData(): GraphData {
   try {
     const rawLocations = localStorage.getItem(STORAGE_KEYS.locations);
     const rawRoutes = localStorage.getItem(STORAGE_KEYS.routes);
-    return {
+    return normalizeGraphData({
       locations: rawLocations ? JSON.parse(rawLocations) as TouristLocation[] : [],
       routes: rawRoutes ? JSON.parse(rawRoutes) as Route[] : [],
-    };
+    });
   } catch {
     return { ...EMPTY_GRAPH };
   }
 }
 
-function writeLocalGraphData(graphData: GraphData) {
-  localStorage.setItem(STORAGE_KEYS.locations, JSON.stringify(graphData.locations));
-  localStorage.setItem(STORAGE_KEYS.routes, JSON.stringify(graphData.routes));
+function writeLocalGraphData(graphData: GraphData, options?: { emitEvent?: boolean }) {
+  const normalized = normalizeGraphData(graphData);
+  localStorage.setItem(STORAGE_KEYS.locations, JSON.stringify(normalized.locations));
+  localStorage.setItem(STORAGE_KEYS.routes, JSON.stringify(normalized.routes));
+  if (options?.emitEvent !== false) {
+    emitTouristDataChanged();
+  }
 }
 
 function readLocalPresets(): PresetSelectionMap {
@@ -43,8 +79,11 @@ function readLocalPresets(): PresetSelectionMap {
   }
 }
 
-function writeLocalPresets(presets: PresetSelectionMap) {
+function writeLocalPresets(presets: PresetSelectionMap, options?: { emitEvent?: boolean }) {
   localStorage.setItem(STORAGE_KEYS.presets, JSON.stringify(presets));
+  if (options?.emitEvent !== false) {
+    emitTouristDataChanged();
+  }
 }
 
 export async function loadGraphData(): Promise<GraphData> {
@@ -59,13 +98,13 @@ export async function loadGraphData(): Promise<GraphData> {
 
     if (locResult.error || routeResult.error) throw new Error('fetch failed');
 
-    const locations = (locResult.data as TouristLocation[])
-      .sort((a, b) => a.fullName.localeCompare(b.fullName));
-    const routes = (routeResult.data as Route[])
-      .sort((a, b) => a.id.localeCompare(b.id));
+    const graphData = normalizeGraphData({
+      locations: (locResult.data as TouristLocation[]) ?? [],
+      routes: (routeResult.data as Route[]) ?? [],
+    });
 
-    writeLocalGraphData({ locations, routes });
-    return { locations, routes };
+    writeLocalGraphData(graphData, { emitEvent: false });
+    return graphData;
   } catch {
     return readLocalGraphData();
   }
@@ -82,15 +121,39 @@ function toDbLocation(location: TouristLocation): Record<string, unknown> {
 
 export async function saveLocation(location: TouristLocation): Promise<void> {
   const current = readLocalGraphData();
+  const existingLocation = current.locations.find(item => item.id === location.id);
+  const normalizedLocation: TouristLocation = {
+    ...location,
+    displayOrder: existingLocation?.displayOrder ?? location.displayOrder ?? current.locations.length,
+  };
   const nextLocations = current.locations.some(item => item.id === location.id)
-    ? current.locations.map(item => item.id === location.id ? location : item)
-    : [...current.locations, location];
+    ? current.locations.map(item => item.id === location.id ? normalizedLocation : item)
+    : [...current.locations, normalizedLocation];
   writeLocalGraphData({ ...current, locations: nextLocations });
 
   const supabase = getSupabase();
   if (!supabase || !hasSupabaseConfig()) return;
 
-  const { error } = await supabase.from('locations').upsert(toDbLocation(location));
+  const { error } = await supabase.from('locations').upsert(toDbLocation(normalizedLocation));
+  if (error) throw error;
+}
+
+export async function saveLocationOrder(locationIds: string[]): Promise<void> {
+  const current = readLocalGraphData();
+  const orderMap = new Map(locationIds.map((id, index) => [id, index]));
+  const nextLocations = normalizeLocations(
+    current.locations.map((location, index) => ({
+      ...location,
+      displayOrder: orderMap.get(location.id) ?? current.locations.length + index,
+    })),
+  );
+
+  writeLocalGraphData({ ...current, locations: nextLocations });
+
+  const supabase = getSupabase();
+  if (!supabase || !hasSupabaseConfig()) return;
+
+  const { error } = await supabase.from('locations').upsert(nextLocations.map(location => toDbLocation(location)));
   if (error) throw error;
 }
 
@@ -148,7 +211,7 @@ export async function loadPresets(): Promise<PresetSelectionMap> {
       (data as Array<{ mode: AppMode; ids: string[]; label: string; desc: string }>).forEach(row => {
         presets[row.mode] = { ids: row.ids, label: row.label, desc: row.desc };
       });
-      writeLocalPresets(presets);
+      writeLocalPresets(presets, { emitEvent: false });
     }
     return presets;
   } catch {

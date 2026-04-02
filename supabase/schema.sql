@@ -28,6 +28,7 @@ create table if not exists locations (
   highlights     text[],
   "highlightsEn" text[],
   images         text[],
+  "displayOrder" integer,
   lat            float8,
   lng            float8,
   x              integer not null,
@@ -61,6 +62,7 @@ alter table locations add column if not exists "neighborhoodEn" text;
 alter table locations add column if not exists "bestForEn"      text;
 alter table locations add column if not exists "highlightsEn"   text[];
 alter table locations add column if not exists images           text[];
+alter table locations add column if not exists "displayOrder"   integer;
 alter table locations add column if not exists lat              float8;
 alter table locations add column if not exists lng              float8;
 
