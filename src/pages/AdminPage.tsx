@@ -14,7 +14,7 @@ import {
   savePreset,
   saveRoute,
 } from '../lib/dataStore';
-import { AppMode, GraphData, PresetSelectionMap } from '../types';
+import { AppMode, GraphData, PresetSelection, PresetSelectionMap } from '../types';
 
 export function AdminPage() {
   const { profile, loading, signIn, signOut, isBackendEnabled, switchDemoRole } = useAuth();
@@ -78,11 +78,22 @@ export function AdminPage() {
     await refreshData();
   }, [refreshData]);
 
-  const handleSavePreset = useCallback(async (mode: AppMode, ids: string[]) => {
-    const locations = graphData.locations.filter(location => ids.includes(location.id));
+  const handleSavePreset = useCallback(async (mode: AppMode, presetConfig: Pick<PresetSelection, 'ids' | 'startId' | 'endId'>) => {
+    const orderedIds = presetConfig.startId && presetConfig.ids.includes(presetConfig.startId)
+      ? [presetConfig.startId, ...presetConfig.ids.filter(id => id !== presetConfig.startId)]
+      : [...presetConfig.ids];
+    const locations = orderedIds
+      .map(id => graphData.locations.find(location => location.id === id))
+      .filter((location): location is GraphData['locations'][number] => Boolean(location));
     const label = presets[mode]?.label ?? `Preset ${mode}`;
     const desc = locations.map(location => location.fullName).join(' → ');
-    await savePreset(mode, { ids, label, desc });
+    const startId = presetConfig.startId ?? orderedIds[0] ?? null;
+    const endId = mode === 'cycle'
+      ? null
+      : presetConfig.endId && orderedIds.includes(presetConfig.endId) && presetConfig.endId !== startId
+        ? presetConfig.endId
+        : orderedIds.find(id => id !== startId) ?? null;
+    await savePreset(mode, { ids: orderedIds, label, desc, startId, endId });
     await refreshData();
   }, [graphData.locations, presets, refreshData]);
 

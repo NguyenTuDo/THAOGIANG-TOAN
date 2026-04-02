@@ -28,7 +28,7 @@ interface PresentationSegment {
 const MODE_LABELS: Record<AppMode, string> = {
   cycle: 'Chu trình Hamilton',
   path: 'Đường đi Hamilton',
-  subset: 'Lộ trình tùy chọn',
+  subset: 'Đường đi ngắn nhất',
 };
 
 const PRESENTATION_HOLD_MS = 1800;

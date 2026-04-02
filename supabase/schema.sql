@@ -46,7 +46,9 @@ create table if not exists preset_selections (
   mode  text     primary key,
   ids   text[]   not null,
   label text     not null,
-  "desc" text    not null
+  "desc" text    not null,
+  "startId" text,
+  "endId" text
 );
 
 -- ------------------------------------------------------------
@@ -65,6 +67,8 @@ alter table locations add column if not exists images           text[];
 alter table locations add column if not exists "displayOrder"   integer;
 alter table locations add column if not exists lat              float8;
 alter table locations add column if not exists lng              float8;
+alter table preset_selections add column if not exists "startId" text;
+alter table preset_selections add column if not exists "endId"   text;
 
 -- ------------------------------------------------------------
 -- 3. ROW LEVEL SECURITY

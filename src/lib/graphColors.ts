@@ -34,10 +34,7 @@ export function getNodeColor(
   }
 
   if (id === startId) return { fill: '#3b82f6', ring: '#93c5fd', ringWidth: 4 };
-  if (appMode === 'path' && id === endId) return { fill: '#f43f5e', ring: '#fda4af', ringWidth: 4 };
-  if (appMode === 'subset' && selectedSubset.includes(id)) {
-    return { fill: '#8b5cf6', ring: '#c4b5fd', ringWidth: 3 };
-  }
+  if ((appMode === 'path' || appMode === 'subset') && id === endId) return { fill: '#f43f5e', ring: '#fda4af', ringWidth: 4 };
 
   return { fill: CATEGORY_COLORS[loc.category] ?? '#64748b', ring: '', ringWidth: 0 };
 }

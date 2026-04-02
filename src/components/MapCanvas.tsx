@@ -113,17 +113,22 @@ function buildPolygonLayoutPositions(locations: TouristLocation[], order: string
   }, {});
 }
 
-function fitMapToLocations(map: LeafletMap, locations: TouristLocation[]) {
+function fitMapToLocations(
+  map: LeafletMap,
+  locations: TouristLocation[],
+  padding = 40,
+  singleLocationZoom = 17,
+) {
   if (locations.length === 0) return;
 
   const latLngs = locations.map(getLocationLatLng);
 
   if (latLngs.length >= 2) {
-    map.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40] });
+    map.fitBounds(L.latLngBounds(latLngs), { padding: [padding, padding] });
     return;
   }
 
-  map.setView(latLngs[0], 17);
+  map.setView(latLngs[0], singleLocationZoom);
 }
 
 function midpointLatLng(from: LatLngLiteral, to: LatLngLiteral): LatLngLiteral {
@@ -141,6 +146,7 @@ function createNodeIcon({
   isSelected,
   isCurrent,
   isEdgeStart,
+  mini,
 }: {
   label: string;
   fill: string;
@@ -149,15 +155,29 @@ function createNodeIcon({
   isSelected: boolean;
   isCurrent: boolean;
   isEdgeStart: boolean;
+  mini: boolean;
 }): DivIcon {
+  const ringColor = isSelected ? '#1d4ed8' : isEdgeStart ? '#f59e0b' : ring;
+  const ringSize = isSelected ? 3 : isEdgeStart ? 3 : ringWidth;
+  const ringShadow = ringColor ? `0 0 0 ${Math.max(ringSize, 2)}px ${ringColor}` : 'none';
+
+  if (mini) {
+    return L.divIcon({
+      className: 'map-node-icon map-node-icon--mini',
+      html: `
+        <div class="map-node-shell map-node-shell--mini ${isCurrent ? 'is-current' : ''} ${isSelected ? 'is-selected' : ''}">
+          <div class="map-node map-node--mini" style="background:${fill}; box-shadow:${ringShadow};"></div>
+        </div>
+      `,
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+    });
+  }
+
   const lines = label.split('\n').slice(0, 3);
   const labelHtml = lines
     .map(line => `<span class="map-node__line">${escapeHtml(line)}</span>`)
     .join('');
-
-  const ringColor = isSelected ? '#1d4ed8' : isEdgeStart ? '#f59e0b' : ring;
-  const ringSize = isSelected ? 3 : isEdgeStart ? 3 : ringWidth;
-  const ringShadow = ringColor ? `0 0 0 ${Math.max(ringSize, 2)}px ${ringColor}` : 'none';
 
   return L.divIcon({
     className: 'map-node-icon',
@@ -219,8 +239,12 @@ function createVehicleIcon(rotationDeg: number): DivIcon {
 
 function MapViewportSync({
   locations,
+  fitPadding,
+  singleLocationZoom,
 }: {
   locations: TouristLocation[];
+  fitPadding: number;
+  singleLocationZoom: number;
 }) {
   const map = useMap();
   const fittedLocationKeyRef = useRef<string | null>(null);
@@ -234,17 +258,35 @@ function MapViewportSync({
       .sort()
       .join('|');
 
-    if (fitKey && fittedLocationKeyRef.current !== fitKey) {
-      fitMapToLocations(map, locations);
-      fittedLocationKeyRef.current = fitKey;
-    }
+    let cancelled = false;
+    let retryTimerId: number | null = null;
 
-    const timerId = window.setTimeout(() => {
+    const syncViewport = () => {
+      if (cancelled) return;
+
+      const size = map.getSize();
+      if (size.x <= 0 || size.y <= 0) {
+        retryTimerId = window.setTimeout(syncViewport, 16);
+        return;
+      }
+
       map.invalidateSize();
-    }, 0);
 
-    return () => window.clearTimeout(timerId);
-  }, [locations, map]);
+      if (fitKey && fittedLocationKeyRef.current !== fitKey) {
+        fitMapToLocations(map, locations, fitPadding, singleLocationZoom);
+        fittedLocationKeyRef.current = fitKey;
+      }
+    };
+
+    retryTimerId = window.setTimeout(syncViewport, 0);
+
+    return () => {
+      cancelled = true;
+      if (retryTimerId !== null) {
+        window.clearTimeout(retryTimerId);
+      }
+    };
+  }, [fitPadding, locations, map, singleLocationZoom]);
 
   return null;
 }
@@ -292,6 +334,13 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   animatePathVehicle = false,
   vehicleProgressOverride = null,
   hideMapControls = false,
+  hideScaleControl = false,
+  hideZoomControl = false,
+  hideAttributionControl = false,
+  disableMapInteraction = false,
+  miniNodeIcons = false,
+  fitPadding = 40,
+  singleLocationZoom = 17,
   defaultShowDistanceLabels = true,
   defaultShowMapBackground = false,
   defaultTileTheme = 'light',
@@ -595,15 +644,26 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
       <MapContainer
         center={initialCenter}
         zoom={DEFAULT_ZOOM}
-        scrollWheelZoom
+        scrollWheelZoom={!disableMapInteraction}
+        dragging={!disableMapInteraction}
+        doubleClickZoom={!disableMapInteraction}
+        touchZoom={!disableMapInteraction}
+        boxZoom={!disableMapInteraction}
+        keyboard={!disableMapInteraction}
+        zoomControl={!hideZoomControl}
+        attributionControl={!hideAttributionControl}
         zoomAnimation={false}
         markerZoomAnimation={true}
         fadeAnimation={false}
         className="h-full w-full z-0"
       >
         {!polygonLayoutActive && <TileLayer attribution={TILE_ATTRIBUTION} url={tileUrl} />}
-        <ScaleControl position="bottomleft" metric imperial={false} />
-        <MapViewportSync locations={displayLocations} />
+        {!hideScaleControl && <ScaleControl position="bottomleft" metric imperial={false} />}
+        <MapViewportSync
+          locations={displayLocations}
+          fitPadding={fitPadding}
+          singleLocationZoom={singleLocationZoom}
+        />
         <MapInteractionSync onMapReady={setMapInstance} onBackgroundClick={() => {
           onSelectElement(null);
           onEdgeStartSet(null);
@@ -715,6 +775,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
                 isSelected,
                 isCurrent,
                 isEdgeStart: uiMode === 'edit' && edgeStart === location.id,
+                mini: miniNodeIcons,
               })}
               draggable={uiMode === 'edit'}
               autoPan={false}
@@ -877,7 +938,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
         <div className="mt-3 space-y-2">
           <button
             type="button"
-            onClick={() => mapInstance && fitMapToLocations(mapInstance, displayLocations)}
+            onClick={() => mapInstance && fitMapToLocations(mapInstance, displayLocations, fitPadding, singleLocationZoom)}
             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             <span className="inline-flex items-center gap-2"><LocateFixed className="h-4 w-4" /> Căn lại khung nhìn</span>

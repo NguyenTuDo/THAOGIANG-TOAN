@@ -21,7 +21,7 @@ export const PathDisplay: React.FC<PathDisplayProps> = ({ path, totalKm, locatio
 
   // Unique nodes in order (exclude the closing return-to-start duplicate)
   // For cycle: path = [A, B, C, D, E, A] → unique visited = [A, B, C, D, E]
-  const isCycle = appMode === 'cycle' || appMode === 'subset';
+  const isCycle = appMode === 'cycle';
   const uniqueVisited = isCycle && path.length > 1 && path[0] === path[path.length - 1]
     ? path.slice(0, -1)
     : path;
@@ -57,7 +57,7 @@ export const PathDisplay: React.FC<PathDisplayProps> = ({ path, totalKm, locatio
     },
   };
   const c = colorMap[color];
-  const title = isCycle ? 'Chu trình tối ưu' : 'Đường đi tối ưu';
+  const title = appMode === 'subset' ? 'Đường đi ngắn nhất' : isCycle ? 'Chu trình tối ưu' : 'Đường đi tối ưu';
 
   return (
     <div className={`rounded-[22px] border p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)] ${c.shell}`}>
@@ -113,7 +113,7 @@ export const PathDisplay: React.FC<PathDisplayProps> = ({ path, totalKm, locatio
       </div>
       </div>
 
-      {allCount > 1 && (
+      {appMode === 'cycle' && allCount > 1 && (
         <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold ${c.pillSoft}`}>
           <RotateCcw className="h-3.5 w-3.5" />
           {allCount} phương án tối ưu cùng độ dài

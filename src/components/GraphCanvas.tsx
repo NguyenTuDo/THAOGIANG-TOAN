@@ -41,6 +41,13 @@ export interface GraphCanvasProps {
   animatePathVehicle?: boolean;
   vehicleProgressOverride?: number | null;
   hideMapControls?: boolean;
+  hideScaleControl?: boolean;
+  hideZoomControl?: boolean;
+  hideAttributionControl?: boolean;
+  disableMapInteraction?: boolean;
+  miniNodeIcons?: boolean;
+  fitPadding?: number;
+  singleLocationZoom?: number;
   defaultShowDistanceLabels?: boolean;
   defaultShowMapBackground?: boolean;
   defaultTileTheme?: 'light' | 'voyager' | 'street' | 'dark';

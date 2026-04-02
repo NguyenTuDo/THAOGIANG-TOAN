@@ -276,15 +276,21 @@ export const PRESET_SELECTIONS: PresetSelectionMap = {
     ids: ['BT', 'NT', 'BM', 'DT', 'PD'],
     label: 'Di sản quanh trường',
     desc: 'Marie Curie → Hồ Con Rùa → Bảo tàng → Dinh Thống Nhất → Nhà Văn Hóa Thanh Niên',
+    startId: 'BT',
+    endId: null,
   },
   path: {
     ids: ['BT', 'NT', 'TD', 'DT', 'BM'],
     label: 'Từ cổng trường đến bảo tàng',
     desc: 'Marie Curie → Hồ Con Rùa → Tao Đàn → Dinh Thống Nhất → Bảo tàng',
+    startId: 'BT',
+    endId: 'BM',
   },
   subset: {
     ids: ['BT', 'NT', 'BM', 'DT', 'TD', 'L8', 'NB'],
-    label: 'Một ngày dạo bộ quận 3 - quận 1',
-    desc: 'Vòng kín tối ưu qua các điểm biểu tượng quanh trường và khu trung tâm',
+    label: 'Tập điểm trung tâm để tìm đường ngắn nhất',
+    desc: 'Chỉ tìm đường đi ngắn nhất bên trong tập điểm đã chọn quanh trường và quận 1',
+    startId: 'BT',
+    endId: 'NB',
   },
 };

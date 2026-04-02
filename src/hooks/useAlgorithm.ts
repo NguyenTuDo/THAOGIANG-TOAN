@@ -43,12 +43,17 @@ export function useAlgorithm({
         endId
       );
     } else {
-      // subset
+      if (!endId) return;
+      const allowedIds = selectedSubset.length > 0
+        ? selectedSubset
+        : graphData.locations.map(location => location.id);
+      const subsetLocations = graphData.locations.filter(location => allowedIds.includes(location.id));
+      const subsetRoutes = graphData.routes.filter(route => allowedIds.includes(route.from) && allowedIds.includes(route.to));
       result = findShortestSubsetRoute(
-        graphData.locations,
-        graphData.routes,
-        selectedSubset.length > 0 ? selectedSubset : graphData.locations.map(l => l.id),
-        startId
+        subsetLocations,
+        subsetRoutes,
+        startId,
+        endId
       );
     }
 

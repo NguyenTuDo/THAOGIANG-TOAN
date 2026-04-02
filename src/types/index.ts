@@ -52,6 +52,8 @@ export interface PresetSelection {
   ids: string[];
   label: string;
   desc: string;
+  startId?: string | null;
+  endId?: string | null;
 }
 
 export type PresetSelectionMap = Record<AppMode, PresetSelection>;
@@ -60,7 +62,7 @@ export type PresetSelectionMap = Record<AppMode, PresetSelection>;
 
 /** cycle  = Bài 1: Chu trình Hamilton (đủ điểm, quay về)
  *  path   = Bài 2: Đường đi Hamilton (A→B, đủ điểm)
- *  subset = Bài 3: Lộ trình tùy chọn (chọn tập con, vòng kín ngắn nhất)
+ *  subset = Bài 3: Đường đi ngắn nhất trong tập chọn (A→B, không cần đi hết)
  */
 export type AppMode = 'cycle' | 'path' | 'subset';
 
@@ -101,9 +103,9 @@ export interface AlgorithmStep {
 
 export interface AlgorithmResult {
   found: boolean;
-  allCycles: { path: string[]; weight: number }[]; // Bài 1 & 3: toàn bộ chu trình tìm được (đã khử nghịch đảo), sắp xếp theo weight
-  shortestCycles: string[][];  // Bài 1 & 3: chu trình ngắn nhất (cùng trọng số) — shortestCycles[0] là đại diện
-  shortestPath: string[];      // Bài 2: đường đi ngắn nhất tìm được
+  allCycles: { path: string[]; weight: number }[]; // Bài 1: toàn bộ chu trình tìm được (đã khử nghịch đảo), sắp xếp theo weight
+  shortestCycles: string[][];  // Bài 1: chu trình ngắn nhất (cùng trọng số) — shortestCycles[0] là đại diện
+  shortestPath: string[];      // Bài 2 & 3: đường đi ngắn nhất tìm được
   totalDistanceKm: number;
   steps: AlgorithmStep[];
 }

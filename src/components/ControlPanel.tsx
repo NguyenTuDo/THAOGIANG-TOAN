@@ -24,7 +24,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   appMode, locations, startId, endId, onStartChange, onEndChange, onRun, onReset, result,
 }) => {
   const colors = MODE_COLORS[appMode];
-  const canRun = startId !== '' && (appMode !== 'path' || (endId !== null && endId !== startId));
+  const canRun = startId !== '' && (appMode === 'cycle' || (endId !== null && endId !== startId));
 
   return (
     <div className="flex flex-col gap-3 p-3">
@@ -49,7 +49,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       {/* End node (Bài 2 only) */}
-      {appMode === 'path' && (
+      {appMode !== 'cycle' && (
         <div>
           <label className="text-xs font-semibold text-slate-700 mb-1 block">
             <span className="inline-block w-3 h-3 rounded-full bg-rose-500 mr-1 align-middle" />
@@ -72,7 +72,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       <div className={`text-[10px] ${colors.text} ${colors.bg} border ${colors.border} rounded-lg px-2.5 py-1.5 leading-relaxed`}>
         {appMode === 'cycle' && 'Tìm chu trình ngắn nhất đi qua tất cả địa điểm và quay về.'}
         {appMode === 'path' && 'Tìm đường đi qua tất cả địa điểm từ điểm chọn đến điểm kết thúc.'}
-        {appMode === 'subset' && 'Chọn địa điểm muốn đến bên dưới → tìm vòng kín ngắn nhất.'}
+        {appMode === 'subset' && 'Chọn tập điểm muốn xét, rồi tìm đường đi ngắn nhất giữa điểm đầu và điểm cuối trong chính tập đó.'}
       </div>
 
       {/* Run button */}
@@ -104,7 +104,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               <div className="text-xl font-black text-emerald-700 text-center">
                 {result.totalDistanceKm.toFixed(1)} km
               </div>
-              {(result.shortestCycles.length > 1) && (
+              {(appMode === 'cycle' && result.shortestCycles.length > 1) && (
                 <div className="text-[10px] text-emerald-600 text-center mt-0.5">
                   {result.shortestCycles.length} lộ trình cùng độ dài tối ưu
                 </div>

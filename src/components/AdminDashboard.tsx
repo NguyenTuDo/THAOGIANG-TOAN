@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Expand, ExternalLink, GripVertical, PencilLine, Plus, Trash2, X } from 'lucide-react';
-import { AppMode, GraphData, PresetSelectionMap, Route, SelectedElement, TouristLocation } from '../types';
+import { AppMode, GraphData, PresetSelection, PresetSelectionMap, Route, SelectedElement, TouristLocation } from '../types';
 import { MapCanvas } from './MapCanvas';
 import { projectGeoLocationsToCanvas, syncLocationsToProjectedCanvas } from '../lib/geoProjection';
 
@@ -13,7 +13,7 @@ interface AdminDashboardProps {
   onSaveLocationOrder: (locationIds: string[]) => Promise<void>;
   onSaveRoute: (route: Route) => Promise<void>;
   onDeleteRoute: (routeId: string) => Promise<void>;
-  onSavePreset: (mode: AppMode, ids: string[]) => Promise<void>;
+  onSavePreset: (mode: AppMode, preset: Pick<PresetSelection, 'ids' | 'startId' | 'endId'>) => Promise<void>;
   onSeedInitialData?: () => Promise<void>;
 }
 
@@ -53,7 +53,7 @@ const EMPTY_ROUTE: Route = {
 const MODE_LABELS: Record<AppMode, string> = {
   cycle: 'Chu trình Hamilton',
   path: 'Đường đi Hamilton',
-  subset: 'Lộ trình tùy chọn',
+  subset: 'Đường đi ngắn nhất',
 };
 
 const CATEGORY_OPTIONS: TouristLocation['category'][] = [
@@ -110,6 +110,8 @@ export function AdminDashboard({
   const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [edgeStart, setEdgeStart] = useState<string | null>(null);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
+  const [focusedLocationId, setFocusedLocationId] = useState<string | null>(null);
+  const [hiddenLocationIds, setHiddenLocationIds] = useState<string[]>([]);
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [draggedLocationId, setDraggedLocationId] = useState<string | null>(null);
   const [dragOverLocation, setDragOverLocation] = useState<{ id: string; position: 'before' | 'after' } | null>(null);
@@ -189,6 +191,7 @@ export function AdminDashboard({
   }, [persistPositions]);
 
   const allLocationIds = useMemo(() => graphData.locations.map(location => location.id), [graphData.locations]);
+  const hiddenLocationIdSet = useMemo(() => new Set(hiddenLocationIds), [hiddenLocationIds]);
   const selectedRoute = useMemo(() => {
     if (selectedElement?.type !== 'route') return null;
     return graphData.routes.find(route => route.id === selectedElement.id) ?? null;
@@ -245,6 +248,46 @@ export function AdminDashboard({
   const selectedLocationHasPendingPosition = selectedLocation
     ? Boolean(localPositions[selectedLocation.id])
     : false;
+  const focusedLocation = useMemo(
+    () => (focusedLocationId ? canvasLocations.find(location => location.id === focusedLocationId) ?? null : null),
+    [canvasLocations, focusedLocationId],
+  );
+  const visibleCanvasLocations = useMemo(
+    () => focusedLocationId
+      ? canvasLocations.filter(location => location.id === focusedLocationId)
+      : canvasLocations.filter(location => !hiddenLocationIdSet.has(location.id)),
+    [canvasLocations, focusedLocationId, hiddenLocationIdSet],
+  );
+  const visibleRoutes = useMemo(
+    () => graphData.routes.filter(route => {
+      if (focusedLocationId) {
+        return route.from === focusedLocationId && route.to === focusedLocationId;
+      }
+      return !hiddenLocationIdSet.has(route.from) && !hiddenLocationIdSet.has(route.to);
+    }),
+    [focusedLocationId, graphData.routes, hiddenLocationIdSet],
+  );
+  const hiddenRouteCount = graphData.routes.length - visibleRoutes.length;
+
+  const toggleLocationVisibility = useCallback((locationId: string) => {
+    setFocusedLocationId(current => current === locationId ? null : current);
+    setHiddenLocationIds(current => (
+      current.includes(locationId)
+        ? current.filter(id => id !== locationId)
+        : [...current, locationId]
+    ));
+  }, []);
+
+  const showAllLocationsOnMap = useCallback(() => {
+    setFocusedLocationId(null);
+    setHiddenLocationIds([]);
+  }, []);
+
+  const focusLocationOnMap = useCallback((locationId: string) => {
+    setFocusedLocationId(current => current === locationId ? null : locationId);
+    setSelectedElement({ type: 'location', id: locationId });
+    setEdgeStart(null);
+  }, []);
 
   React.useEffect(() => {
     setRouteWeights(
@@ -287,6 +330,41 @@ export function AdminDashboard({
       setSelectedElement(null);
     }
   }, [graphData.locations, graphData.routes, selectedElement]);
+
+  useEffect(() => {
+    setHiddenLocationIds(current => current.filter(id => allLocationIds.includes(id)));
+  }, [allLocationIds]);
+
+  useEffect(() => {
+    if (focusedLocationId && !allLocationIds.includes(focusedLocationId)) {
+      setFocusedLocationId(null);
+    }
+  }, [allLocationIds, focusedLocationId]);
+
+  useEffect(() => {
+    if (edgeStart && hiddenLocationIdSet.has(edgeStart)) {
+      setEdgeStart(null);
+    }
+
+    if (focusedLocationId && edgeStart && edgeStart !== focusedLocationId) {
+      setEdgeStart(null);
+    }
+
+    if (!selectedElement) return;
+
+    if (selectedElement.type === 'location' && (hiddenLocationIdSet.has(selectedElement.id) || (focusedLocationId !== null && selectedElement.id !== focusedLocationId))) {
+      setSelectedElement(null);
+      return;
+    }
+
+    if (selectedElement.type === 'route') {
+      const route = graphData.routes.find(item => item.id === selectedElement.id);
+      const routeHiddenByFocus = focusedLocationId !== null && (route?.from !== focusedLocationId || route?.to !== focusedLocationId);
+      if (!route || hiddenLocationIdSet.has(route.from) || hiddenLocationIdSet.has(route.to) || routeHiddenByFocus) {
+        setSelectedElement(null);
+      }
+    }
+  }, [edgeStart, focusedLocationId, graphData.routes, hiddenLocationIdSet, selectedElement]);
 
   useEffect(() => {
     if (!isFullscreenMap) return;
@@ -582,8 +660,37 @@ export function AdminDashboard({
               <div className="mt-1 text-sm text-slate-500">
                 Kéo node trực tiếp trên nền bản đồ để cập nhật vị trí thật. Muốn thêm cạnh mới thì bấm vào một điểm rồi bấm điểm thứ hai. Nếu cần nhìn gọn như đồ thị, chỉ việc tắt nền map ngay trong lớp bản đồ.
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-700">
+                  Đang hiện {visibleCanvasLocations.length}/{canvasLocations.length} điểm
+                </span>
+                {focusedLocation && (
+                  <span className="rounded-full bg-emerald-100 px-3 py-1.5 font-semibold text-emerald-800">
+                    Đang tập trung: {focusedLocation.fullName}
+                  </span>
+                )}
+                {hiddenLocationIds.length > 0 && (
+                  <>
+                    <span className="rounded-full bg-amber-100 px-3 py-1.5 font-semibold text-amber-800">
+                      Đang ẩn {hiddenLocationIds.length} điểm
+                    </span>
+                    <span className="rounded-full bg-amber-50 px-3 py-1.5 font-semibold text-amber-700">
+                      Ẩn kèm {hiddenRouteCount} cạnh liên quan
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {(hiddenLocationIds.length > 0 || focusedLocationId) && (
+                <button
+                  type="button"
+                  onClick={showAllLocationsOnMap}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 px-4 py-2 text-sm font-bold text-amber-800 transition hover:bg-amber-50"
+                >
+                  Hiện lại tất cả
+                </button>
+              )}
               {hasPendingPositions && (
                 <span className="text-xs text-amber-600 font-medium">
                   {savingPositions
@@ -611,8 +718,8 @@ export function AdminDashboard({
           <div className="relative h-[520px] overflow-hidden rounded-2xl">
             <>
               <MapCanvas
-                locations={canvasLocations}
-                routes={graphData.routes}
+                locations={visibleCanvasLocations}
+                routes={visibleRoutes}
                 appMode="cycle"
                 uiMode="edit"
                 startId=""
@@ -641,9 +748,11 @@ export function AdminDashboard({
               {selectedLocation && (
                 <AdminLocationQuickPanel
                   location={selectedLocation}
+                  hiddenOnMap={hiddenLocationIdSet.has(selectedLocation.id)}
                   hasPendingPosition={selectedLocationHasPendingPosition}
                   onClose={() => setSelectedElement(null)}
                   onEdit={() => openEditLocationModal(selectedLocation)}
+                  onToggleVisibility={() => toggleLocationVisibility(selectedLocation.id)}
                   onDelete={async () => {
                     setSaving(true);
                     setStatus(null);
@@ -725,8 +834,8 @@ export function AdminDashboard({
             </div>
             <div className="min-h-0 flex-1 overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-2xl">
               <MapCanvas
-                locations={canvasLocations}
-                routes={graphData.routes}
+                locations={visibleCanvasLocations}
+                routes={visibleRoutes}
                 appMode="cycle"
                 uiMode="edit"
                 startId=""
@@ -749,9 +858,11 @@ export function AdminDashboard({
                 <AdminLocationQuickPanel
                   className="absolute bottom-10 left-10 z-[610]"
                   location={selectedLocation}
+                  hiddenOnMap={hiddenLocationIdSet.has(selectedLocation.id)}
                   hasPendingPosition={selectedLocationHasPendingPosition}
                   onClose={() => setSelectedElement(null)}
                   onEdit={() => openEditLocationModal(selectedLocation)}
+                  onToggleVisibility={() => toggleLocationVisibility(selectedLocation.id)}
                   onDelete={async () => {
                     setSaving(true);
                     setStatus(null);
@@ -822,7 +933,7 @@ export function AdminDashboard({
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <div className="text-xl font-black text-slate-900">Danh sách địa điểm</div>
-              <div className="mt-1 text-sm text-slate-500">Kéo tay nắm ở đầu mỗi dòng để đổi thứ tự. Thứ tự này sẽ đồng bộ sang giao diện chính ngay.</div>
+              <div className="mt-1 text-sm text-slate-500">Kéo tay nắm ở đầu mỗi dòng để đổi thứ tự. Bấm vào thẻ địa điểm để map chỉ hiện riêng điểm đó, giống cách chọn tập điểm ở admin/algorithms.</div>
             </div>
             <button
               type="button"
@@ -850,7 +961,7 @@ export function AdminDashboard({
                       setDragOverLocation(null);
                     }
                   }}
-                  className={`rounded-2xl border px-4 py-4 transition ${draggedLocationId === location.id ? 'border-dashed border-emerald-300 bg-emerald-50/50 opacity-70' : 'border-slate-100'} ${dragOverLocation?.id === location.id ? 'border-emerald-300 bg-emerald-50/40' : ''}`}
+                  className={`rounded-2xl border px-4 py-4 transition ${draggedLocationId === location.id ? 'border-dashed border-emerald-300 bg-emerald-50/50 opacity-70' : 'border-slate-100'} ${dragOverLocation?.id === location.id ? 'border-emerald-300 bg-emerald-50/40' : ''} ${focusedLocationId === location.id ? 'border-emerald-300 bg-emerald-50/70 shadow-[0_12px_28px_rgba(16,43,36,0.08)]' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
@@ -866,12 +977,29 @@ export function AdminDashboard({
                       >
                         <GripVertical className="h-4 w-4" />
                       </button>
-                      <div className="min-w-0">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => focusLocationOnMap(location.id)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            focusLocationOnMap(location.id);
+                          }
+                        }}
+                        className="min-w-0 text-left"
+                        title={`Hiện riêng ${location.fullName} trên bản đồ`}
+                      >
                       <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
                         <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-100 px-2 text-[11px] font-black text-slate-600">
                           {index + 1}
                         </span>
                         <span>{location.fullName}</span>
+                        {focusedLocationId === location.id && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-800">
+                            Đang hiện
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
                         {location.id} • {location.category} • ({location.x}, {location.y})
@@ -879,17 +1007,34 @@ export function AdminDashboard({
                           ? ` • ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`
                           : ''}
                       </div>
-                      {location.googleMapsUrl && (
-                        <a href={location.googleMapsUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-sky-700">
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          Mở Google Maps
-                        </a>
-                      )}
                       {dragOverLocation?.id === location.id && draggedLocationId !== location.id && (
                         <div className="mt-2 text-[11px] font-semibold text-emerald-700">
                           {dragOverLocation.position === 'before' ? 'Thả vào trước địa điểm này' : 'Thả vào sau địa điểm này'}
                         </div>
                       )}
+                      {focusedLocationId === location.id && (
+                        <div className="mt-2 text-[11px] font-semibold text-emerald-700">
+                          Map đang chỉ hiện riêng điểm này. Bấm lại để thoát chế độ tập trung.
+                        </div>
+                      )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                        {location.googleMapsUrl && (
+                          <a href={location.googleMapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-sky-700">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Mở Google Maps
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleLocationVisibility(location.id)}
+                          className={`rounded-full px-3 py-1 ${hiddenLocationIdSet.has(location.id) ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                        >
+                          {hiddenLocationIdSet.has(location.id) ? 'Hiện lại trên bản đồ' : 'Ẩn trên bản đồ'}
+                        </button>
+                        {hiddenLocationIdSet.has(location.id) && (
+                          <span className="text-amber-700">Các cạnh nối với điểm này cũng đang bị ẩn trên map.</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
@@ -929,7 +1074,10 @@ export function AdminDashboard({
                 <div key={route.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 px-4 py-3">
                   <div>
                     <div className="text-sm font-bold text-slate-900">{route.from} → {route.to}</div>
-                    <div className="mt-1 text-xs text-slate-500">Trọng số: {route.distanceKm.toFixed(1)} • {route.id}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Trọng số: {route.distanceKm.toFixed(1)} • {route.id}
+                      {(hiddenLocationIdSet.has(route.from) || hiddenLocationIdSet.has(route.to)) ? ' • Đang ẩn trên map' : ''}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => openEditRouteModal(route)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
@@ -1005,9 +1153,9 @@ export function AdminDashboard({
                   key={mode}
                   mode={mode}
                   label={MODE_LABELS[mode]}
-                  selectedIds={presets[mode].ids}
-                  allLocationIds={allLocationIds}
-                  onSave={ids => onSavePreset(mode, ids)}
+                  preset={presets[mode]}
+                  locations={graphData.locations}
+                  onSave={preset => onSavePreset(mode, preset)}
                 />
               ))}
             </div>
@@ -1207,31 +1355,68 @@ export function AdminDashboard({
 function PresetEditor({
   mode,
   label,
-  selectedIds,
-  allLocationIds,
+  preset,
+  locations,
   onSave,
 }: {
   mode: AppMode;
   label: string;
-  selectedIds: string[];
-  allLocationIds: string[];
-  onSave: (ids: string[]) => Promise<void>;
+  preset: PresetSelection;
+  locations: TouristLocation[];
+  onSave: (preset: Pick<PresetSelection, 'ids' | 'startId' | 'endId'>) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState<string[]>(selectedIds);
+  const allLocationIds = useMemo(() => locations.map(location => location.id), [locations]);
+  const [draft, setDraft] = useState<string[]>(preset.ids);
+  const [startId, setStartId] = useState<string | null>(preset.startId ?? preset.ids[0] ?? null);
+  const [endId, setEndId] = useState<string | null>(preset.endId ?? null);
   const [saving, setSaving] = useState(false);
 
   React.useEffect(() => {
-    // Only keep IDs that actually exist in the current location list
-    const validIds = selectedIds.filter(id => allLocationIds.includes(id));
+    const validIds = preset.ids.filter(id => allLocationIds.includes(id));
     setDraft(validIds);
-  }, [selectedIds, allLocationIds]);
+    const nextStartId = preset.startId && validIds.includes(preset.startId)
+      ? preset.startId
+      : validIds[0] ?? null;
+    setStartId(nextStartId);
+    setEndId(
+      mode === 'cycle'
+        ? null
+        : preset.endId && validIds.includes(preset.endId) && preset.endId !== nextStartId
+          ? preset.endId
+          : validIds.find(id => id !== nextStartId) ?? null,
+    );
+  }, [allLocationIds, mode, preset]);
+
+  React.useEffect(() => {
+    if (draft.length === 0) {
+      setStartId(null);
+      setEndId(null);
+      return;
+    }
+
+    if (!startId || !draft.includes(startId)) {
+      setStartId(draft[0]);
+      return;
+    }
+
+    if (mode === 'cycle') {
+      if (endId !== null) {
+        setEndId(null);
+      }
+      return;
+    }
+
+    if (!endId || !draft.includes(endId) || endId === startId) {
+      setEndId(draft.find(id => id !== startId) ?? null);
+    }
+  }, [draft, endId, mode, startId]);
 
   const toggle = (id: string) => {
     setDraft(current => {
       if (current.includes(id)) {
         return current.filter(item => item !== id);
       }
-      const limit = mode === 'subset' ? 7 : 5;
+      const limit = mode === 'subset' ? allLocationIds.length : 5;
       if (current.length >= limit) return current;
       return [...current, id];
     });
@@ -1254,16 +1439,42 @@ function PresetEditor({
           </button>
         ))}
       </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <Field label="Điểm đầu mặc định">
+          <select value={startId ?? ''} onChange={event => setStartId(event.target.value || null)} className="field-input" title="Điểm đầu mặc định">
+            <option value="">Chọn điểm đầu</option>
+            {draft.map(id => {
+              const location = locations.find(item => item.id === id);
+              return <option key={id} value={id}>{location?.fullName ?? id}</option>;
+            })}
+          </select>
+        </Field>
+        {mode !== 'cycle' ? (
+          <Field label="Điểm cuối mặc định">
+            <select value={endId ?? ''} onChange={event => setEndId(event.target.value || null)} className="field-input" title="Điểm cuối mặc định">
+              <option value="">Chọn điểm cuối</option>
+              {draft.filter(id => id !== startId).map(id => {
+                const location = locations.find(item => item.id === id);
+                return <option key={id} value={id}>{location?.fullName ?? id}</option>;
+              })}
+            </select>
+          </Field>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
+            Bài 1 chỉ cần điểm xuất phát mặc định để mô tả chu trình mẫu.
+          </div>
+        )}
+      </div>
       <div className="mt-3 text-xs text-slate-500">
-        Đã chọn {draft.length} điểm. {mode === 'subset' ? 'Khuyến nghị từ 5 đến 7 điểm.' : 'Nên giữ đúng 5 điểm.'}
+        Đã chọn {draft.length} điểm. {mode === 'subset' ? 'Bài 3 có thể chọn tùy ý trong toàn bộ danh sách địa điểm hiện có.' : 'Nên giữ đúng 5 điểm.'}
       </div>
       <button
         type="button"
-        disabled={saving || draft.length < 5}
+        disabled={saving || draft.length < (mode === 'subset' ? 2 : 5) || !startId || (mode !== 'cycle' && (!endId || endId === startId))}
         onClick={async () => {
           setSaving(true);
           try {
-            await onSave(draft);
+            await onSave({ ids: draft, startId, endId: mode === 'cycle' ? null : endId });
           } finally {
             setSaving(false);
           }
@@ -1324,18 +1535,22 @@ function Field({
 
 function AdminLocationQuickPanel({
   location,
+  hiddenOnMap,
   hasPendingPosition,
   onClose,
   onEdit,
+  onToggleVisibility,
   onDelete,
   onSavePositions,
   saving,
   className = 'absolute bottom-3 right-3 z-[610]',
 }: {
   location: TouristLocation;
+  hiddenOnMap: boolean;
   hasPendingPosition: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onToggleVisibility: () => void;
   onDelete: () => Promise<void>;
   onSavePositions?: () => void;
   saving: boolean;
@@ -1388,6 +1603,13 @@ function AdminLocationQuickPanel({
             Mở Maps
           </a>
         )}
+        <button
+          type="button"
+          onClick={onToggleVisibility}
+          className={`rounded-full px-4 py-2 text-sm font-bold ${hiddenOnMap ? 'border border-amber-200 text-amber-800 hover:bg-amber-50' : 'border border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+        >
+          {hiddenOnMap ? 'Hiện lại trên map' : 'Ẩn khỏi map'}
+        </button>
         {onSavePositions && (
           <button
             type="button"

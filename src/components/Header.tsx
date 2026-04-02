@@ -28,11 +28,11 @@ const MODES: { id: AppMode; label: string; short: string; color: string; activeC
   },
   {
     id: 'subset',
-    label: 'Bài 3 — Lộ Trình Tùy Chọn',
+    label: 'Bài 3 — Đường Đi Ngắn Nhất',
     short: 'Bài 3',
     color: 'text-amber-600',
     activeColor: 'bg-amber-600 text-white',
-    desc: 'Chọn điểm muốn đến — tìm vòng kín ngắn nhất trên tập đó',
+    desc: 'Từ A đến B trong tập điểm đã chọn, không cần đi hết tất cả điểm',
   },
 ];
 

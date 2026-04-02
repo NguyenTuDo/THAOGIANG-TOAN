@@ -53,9 +53,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
   }
 
   const activePath =
-    appMode === 'path'
-      ? result.shortestPath
-      : result.shortestCycles[0] ?? [];
+    appMode === 'cycle'
+      ? result.shortestCycles[0] ?? []
+      : result.shortestPath;
 
   const getShort = (id: string) => {
     const label = locations.find(l => l.id === id)?.label ?? id;
@@ -76,7 +76,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
         ) : (
           <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-700">
             <span>✗</span>
-            <span>{appMode === 'path' ? 'Không tìm thấy đường đi Hamilton' : 'Không tìm thấy chu trình Hamilton'}</span>
+            <span>{appMode === 'cycle' ? 'Không tìm thấy chu trình Hamilton' : appMode === 'path' ? 'Không tìm thấy đường đi Hamilton' : 'Không tìm thấy đường đi ngắn nhất'}</span>
           </div>
         )}
       </div>
@@ -91,15 +91,15 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                   ? 'Không tồn tại chu trình Hamilton trong đồ thị này. Thử chọn bộ điểm khác hoặc thêm tuyến đường kết nối.'
                   : appMode === 'path'
                     ? 'Không tồn tại đường đi Hamilton từ điểm đầu đến điểm cuối.'
-                    : 'Không tồn tại chu trình Hamilton trên tập điểm đã chọn.'}
+                    : 'Không tồn tại đường đi nối hai đầu mút trong đồ thị hiện tại.'}
               </div>
             </div>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
 
-            {/* ── BẢNG TOÀN BỘ CHU TRÌNH (chỉ Bài 1 & Bài 3) ── */}
-            {appMode !== 'path' && result.allCycles.length > 0 && (
+            {/* ── BẢNG TOÀN BỘ CHU TRÌNH (chỉ Bài 1) ── */}
+            {appMode === 'cycle' && result.allCycles.length > 0 && (
               <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
                 <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -156,7 +156,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
             <div className="overflow-hidden rounded-xl border border-emerald-100 bg-white">
               <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50/40 px-3 py-2">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                  {appMode === 'path' ? 'Đường đi tối ưu' : 'Chu trình tối ưu — phương án đại diện'}
+                  {appMode === 'cycle' ? 'Chu trình tối ưu — phương án đại diện' : appMode === 'subset' ? 'Đường đi ngắn nhất' : 'Đường đi tối ưu'}
                 </div>
                 <div className="text-xs font-black text-emerald-700">
                   {result.totalDistanceKm.toFixed(1)} km
@@ -167,7 +167,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                   {activePath.slice(0, -1).map((nodeId, segIdx) => {
                     const nextId = activePath[segIdx + 1];
                     const dist = getSegmentDist(nodeId, nextId);
-                    const isCycleReturn = appMode !== 'path' && segIdx === activePath.length - 2;
+                    const isCycleReturn = appMode === 'cycle' && segIdx === activePath.length - 2;
                     return (
                       <tr
                         key={segIdx}
@@ -205,7 +205,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
 
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[10px] leading-5 text-slate-600">
               <span className="font-bold text-slate-700">Lớp 2 — Diễn giải cách làm: </span>
-              Bấm tab <strong>Cách làm</strong> để xem từng bước thử và quay lui của thuật toán.
+              {appMode === 'subset'
+                ? <>Bấm tab <strong>Cách làm</strong> để xem các bước chốt khoảng cách ngắn nhất của thuật toán.</>
+                : <>Bấm tab <strong>Cách làm</strong> để xem từng bước thử và quay lui của thuật toán.</>}
             </div>
           </div>
         )
@@ -275,7 +277,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                 </tbody>
               </table>
               <div className="flex items-center gap-1 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700 border-t border-emerald-100">
-                ✓ Thuật toán đảm bảo mỗi điểm chỉ được thăm đúng 1 lần
+                {appMode === 'subset'
+                  ? '✓ Thuật toán chốt dần khoảng cách ngắn nhất tới từng điểm đang xét'
+                  : '✓ Thuật toán đảm bảo mỗi điểm chỉ được thăm đúng 1 lần'}
               </div>
             </div>
           )}

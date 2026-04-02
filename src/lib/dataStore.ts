@@ -1,4 +1,4 @@
-import { AppMode, GraphData, PresetSelectionMap, Route, TouristLocation } from '../types';
+import { AppMode, GraphData, PresetSelection, PresetSelectionMap, Route, TouristLocation } from '../types';
 import { getSupabase, hasSupabaseConfig } from './supabase';
 
 export const TOURIST_DATA_CHANGED_EVENT = 'tourist-data-changed';
@@ -12,11 +12,43 @@ const STORAGE_KEYS = {
 
 const EMPTY_GRAPH: GraphData = { locations: [], routes: [] };
 
-const EMPTY_PRESETS: PresetSelectionMap = {
-  cycle:  { ids: [], label: '', desc: '' },
-  path:   { ids: [], label: '', desc: '' },
-  subset: { ids: [], label: '', desc: '' },
-};
+function createEmptyPresets(): PresetSelectionMap {
+  return {
+    cycle: { ids: [], label: '', desc: '', startId: null, endId: null },
+    path: { ids: [], label: '', desc: '', startId: null, endId: null },
+    subset: { ids: [], label: '', desc: '', startId: null, endId: null },
+  };
+}
+
+const EMPTY_PRESETS: PresetSelectionMap = createEmptyPresets();
+
+function normalizePresetSelection(mode: AppMode, preset?: Partial<PresetSelection> | null): PresetSelection {
+  const ids = Array.isArray(preset?.ids) ? preset.ids.filter((id): id is string => typeof id === 'string') : [];
+  const requestedStartId = typeof preset?.startId === 'string' && ids.includes(preset.startId) ? preset.startId : null;
+  const startId = requestedStartId ?? ids[0] ?? null;
+  const requestedEndId = typeof preset?.endId === 'string' && ids.includes(preset.endId) ? preset.endId : null;
+  const endId = mode === 'cycle'
+    ? null
+    : requestedEndId && requestedEndId !== startId
+      ? requestedEndId
+      : ids.find(id => id !== startId) ?? null;
+
+  return {
+    ids,
+    label: typeof preset?.label === 'string' ? preset.label : '',
+    desc: typeof preset?.desc === 'string' ? preset.desc : '',
+    startId,
+    endId,
+  };
+}
+
+function normalizePresetMap(presets?: Partial<PresetSelectionMap> | null): PresetSelectionMap {
+  return {
+    cycle: normalizePresetSelection('cycle', presets?.cycle),
+    path: normalizePresetSelection('path', presets?.path),
+    subset: normalizePresetSelection('subset', presets?.subset),
+  };
+}
 
 function sortLocations(locations: TouristLocation[]): TouristLocation[] {
   return [...locations].sort((a, b) => {
@@ -73,14 +105,14 @@ function writeLocalGraphData(graphData: GraphData, options?: { emitEvent?: boole
 function readLocalPresets(): PresetSelectionMap {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.presets);
-    return raw ? JSON.parse(raw) as PresetSelectionMap : { ...EMPTY_PRESETS };
+    return raw ? normalizePresetMap(JSON.parse(raw) as PresetSelectionMap) : createEmptyPresets();
   } catch {
-    return { ...EMPTY_PRESETS };
+    return createEmptyPresets();
   }
 }
 
 function writeLocalPresets(presets: PresetSelectionMap, options?: { emitEvent?: boolean }) {
-  localStorage.setItem(STORAGE_KEYS.presets, JSON.stringify(presets));
+  localStorage.setItem(STORAGE_KEYS.presets, JSON.stringify(normalizePresetMap(presets)));
   if (options?.emitEvent !== false) {
     emitTouristDataChanged();
   }
@@ -200,35 +232,58 @@ export async function deleteRoute(routeId: string): Promise<void> {
 
 export async function loadPresets(): Promise<PresetSelectionMap> {
   const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return readLocalPresets();
+  const localPresets = readLocalPresets();
+  if (!supabase || !hasSupabaseConfig()) return localPresets;
 
   try {
     const { data, error } = await supabase.from('preset_selections').select('*');
     if (error) throw error;
 
-    const presets: PresetSelectionMap = { ...EMPTY_PRESETS };
+    const presets: PresetSelectionMap = createEmptyPresets();
     if (data && data.length > 0) {
-      (data as Array<{ mode: AppMode; ids: string[]; label: string; desc: string }>).forEach(row => {
-        presets[row.mode] = { ids: row.ids, label: row.label, desc: row.desc };
+      (data as Array<{ mode: AppMode; ids: string[]; label: string; desc: string; startId?: string | null; endId?: string | null }>).forEach(row => {
+        presets[row.mode] = normalizePresetSelection(row.mode, {
+          ...localPresets[row.mode],
+          ids: row.ids,
+          label: row.label,
+          desc: row.desc,
+          startId: row.startId ?? localPresets[row.mode]?.startId ?? null,
+          endId: row.endId ?? localPresets[row.mode]?.endId ?? null,
+        });
       });
       writeLocalPresets(presets, { emitEvent: false });
+      return presets;
     }
-    return presets;
+    return localPresets;
   } catch {
-    return readLocalPresets();
+    return localPresets;
   }
 }
 
 export async function savePreset(mode: AppMode, preset: PresetSelectionMap[AppMode]): Promise<void> {
   const current = readLocalPresets();
-  const next = { ...current, [mode]: preset };
+  const next = { ...current, [mode]: normalizePresetSelection(mode, preset) };
   writeLocalPresets(next);
 
   const supabase = getSupabase();
   if (!supabase || !hasSupabaseConfig()) return;
 
-  const { error } = await supabase.from('preset_selections').upsert({ mode, ...preset });
-  if (error) throw error;
+  const payload = { mode, ...next[mode] };
+  const { error } = await supabase.from('preset_selections').upsert(payload);
+  if (!error) return;
+
+  if (error.message.includes('startId') || error.message.includes('endId')) {
+    const { error: fallbackError } = await supabase.from('preset_selections').upsert({
+      mode,
+      ids: next[mode].ids,
+      label: next[mode].label,
+      desc: next[mode].desc,
+    });
+    if (!fallbackError) return;
+    throw fallbackError;
+  }
+
+  throw error;
 }
 
 export interface GuidebookDraft {

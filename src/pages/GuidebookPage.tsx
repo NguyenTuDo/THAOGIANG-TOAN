@@ -30,13 +30,13 @@ const MODES: { id: AppMode; label: string; labelEn: string; desc: string; descEn
     id: 'subset',
     label: 'Bài 3',
     labelEn: 'Mode 3',
-    desc: 'Lộ trình tùy chọn',
-    descEn: 'Custom subset route',
+    desc: 'Đường đi ngắn nhất trong tập chọn',
+    descEn: 'Shortest path in chosen subset',
     activeClass: 'bg-[#82501f] text-white',
   },
 ];
 
-type AppView = 'selector' | 'graph';
+type AppView = 'selector' | 'preview' | 'result';
 
 export function GuidebookPage() {
   const { lang, setLang, t } = useLang();
@@ -112,13 +112,41 @@ export function GuidebookPage() {
     }
   }, [graphData.locations]);
 
-  const MAX: Record<AppMode, number> = { cycle: 5, path: 5, subset: 99 };
+  const MAX: Record<AppMode, number> = { cycle: 5, path: 5, subset: Number.MAX_SAFE_INTEGER };
+
+  useEffect(() => {
+    if (selectedIds.length === 0) {
+      setEndId(null);
+      return;
+    }
+
+    if (appMode === 'cycle') {
+      if (endId !== null) {
+        setEndId(null);
+      }
+      return;
+    }
+
+    const startId = selectedIds[0];
+    const candidateEndIds = selectedIds.filter(id => id !== startId);
+
+    if (candidateEndIds.length === 0) {
+      if (endId !== null) {
+        setEndId(null);
+      }
+      return;
+    }
+
+    if (!endId || !candidateEndIds.includes(endId)) {
+      setEndId(candidateEndIds[candidateEndIds.length - 1]);
+    }
+  }, [appMode, endId, selectedIds]);
 
   const handleToggle = useCallback((id: string) => {
     setSelectedIds(prev => {
       if (prev.includes(id)) {
         const next = prev.filter(x => x !== id);
-        if (appMode === 'path' && id === endId) setEndId(null);
+        if (appMode !== 'cycle' && id === endId) setEndId(null);
         return next;
       }
       if (prev.length >= MAX[appMode]) return prev;
@@ -138,36 +166,84 @@ export function GuidebookPage() {
     if (!preset) return;
 
     const valid = preset.ids.filter(id => graphData.locations.some(l => l.id === id));
-    setSelectedIds(valid);
+    const startId = preset.startId && valid.includes(preset.startId) ? preset.startId : valid[0] ?? null;
+    const ordered = startId ? [startId, ...valid.filter(id => id !== startId)] : valid;
+    const nextEndId = appMode === 'cycle'
+      ? null
+      : preset.endId && ordered.includes(preset.endId) && preset.endId !== startId
+        ? preset.endId
+        : ordered.find(id => id !== startId) ?? null;
 
-    if (appMode === 'path' && valid.length >= 2) {
-      setEndId(valid[valid.length - 1]);
-    } else {
-      setEndId(null);
-    }
+    setSelectedIds(ordered);
+    setEndId(nextEndId);
   }, [appMode, graphData.locations, presets]);
 
-  const handleFindRoute = useCallback(() => {
-    if (selectedIds.length === 0) return;
+  const buildResult = useCallback((nextSelectedIds: string[], nextEndId: string | null) => {
+    if (nextSelectedIds.length === 0) return null;
 
-    const startId = selectedIds[0];
-    const subsetLocs = graphData.locations.filter(l => selectedIds.includes(l.id));
+    const startId = nextSelectedIds[0];
+    const subsetLocs = graphData.locations.filter(l => nextSelectedIds.includes(l.id));
     const subsetRoutes = graphData.routes.filter(
-      r => selectedIds.includes(r.from) && selectedIds.includes(r.to),
+      r => nextSelectedIds.includes(r.from) && nextSelectedIds.includes(r.to),
     );
 
-    let nextResult: AlgorithmResult;
     if (appMode === 'cycle') {
-      nextResult = findShortestHamiltonianCycle(subsetLocs, subsetRoutes, startId);
-    } else if (appMode === 'path') {
-      nextResult = findShortestHamiltonianPath(subsetLocs, subsetRoutes, startId, endId!);
-    } else {
-      nextResult = findShortestSubsetRoute(graphData.locations, graphData.routes, selectedIds, startId);
+      return findShortestHamiltonianCycle(subsetLocs, subsetRoutes, startId);
+    }
+    if (appMode === 'path') {
+      if (!nextEndId) return null;
+      return findShortestHamiltonianPath(subsetLocs, subsetRoutes, startId, nextEndId);
+    }
+    if (!nextEndId) return null;
+    return findShortestSubsetRoute(subsetLocs, subsetRoutes, startId, nextEndId);
+  }, [appMode, graphData.locations, graphData.routes]);
+
+  const canPreviewSelection = useCallback((nextSelectedIds: string[], nextEndId: string | null) => {
+    if (appMode === 'cycle') {
+      return nextSelectedIds.length === 5;
     }
 
+    if (appMode === 'path') {
+      return nextSelectedIds.length === 5 && nextEndId !== null && nextEndId !== nextSelectedIds[0];
+    }
+
+    return nextSelectedIds.length >= 2 && nextEndId !== null && nextEndId !== nextSelectedIds[0];
+  }, [appMode]);
+
+  const handleQuickStart = useCallback(() => {
+    const preset = presets[appMode];
+    if (!preset) return;
+
+    const valid = preset.ids.filter(id => graphData.locations.some(l => l.id === id));
+    const startId = preset.startId && valid.includes(preset.startId) ? preset.startId : valid[0] ?? null;
+    const ordered = startId ? [startId, ...valid.filter(id => id !== startId)] : valid;
+    const nextEndId = appMode === 'cycle'
+      ? null
+      : preset.endId && ordered.includes(preset.endId) && preset.endId !== startId
+        ? preset.endId
+        : ordered.find(id => id !== startId) ?? null;
+
+    setSelectedIds(ordered);
+    setEndId(nextEndId);
+
+    setResult(null);
+    setAppView(canPreviewSelection(ordered, nextEndId) ? 'preview' : 'selector');
+  }, [appMode, canPreviewSelection, graphData.locations, presets]);
+
+  const handleFindRoute = useCallback(() => {
+    if (!canPreviewSelection(selectedIds, endId)) return;
+
+    setResult(null);
+    setAppView('preview');
+  }, [canPreviewSelection, selectedIds, endId]);
+
+  const handleSolveRoute = useCallback(() => {
+    const nextResult = buildResult(selectedIds, endId);
+    if (!nextResult) return;
+
     setResult(nextResult);
-    setAppView('graph');
-  }, [selectedIds, appMode, graphData, endId]);
+    setAppView('result');
+  }, [buildResult, selectedIds, endId]);
 
   const subsetLocs = useMemo(
     () => graphData.locations.filter(l => selectedIds.includes(l.id)),
@@ -248,24 +324,26 @@ export function GuidebookPage() {
                   onToggle={handleToggle}
                   onClearAll={handleClearAll}
                   onFindRoute={handleFindRoute}
+                  onQuickStart={handleQuickStart}
                   onLoadPreset={handleLoadPreset}
                   preset={presets[appMode] ?? null}
                   endId={endId}
                   onSetEnd={setEndId}
                 />
               ) : (
-                result && (
-                  <GraphView
-                    locations={subsetLocs}
-                    routes={subsetRoutes}
-                    appMode={appMode}
-                    startId={selectedIds[0]}
-                    endId={endId}
-                    result={result}
-                    onBack={() => setAppView('selector')}
-                    onRerun={handleFindRoute}
-                  />
-                )
+                <GraphView
+                  locations={subsetLocs}
+                  routes={subsetRoutes}
+                  selectedIds={selectedIds}
+                  appMode={appMode}
+                  startId={selectedIds[0]}
+                  endId={endId}
+                  stage={appView === 'preview' ? 'preview' : 'result'}
+                  result={appView === 'result' ? result : null}
+                  onBack={() => setAppView(appView === 'result' ? 'preview' : 'selector')}
+                  onSolve={handleSolveRoute}
+                  onRerun={handleSolveRoute}
+                />
               )}
             </section>
           </div>

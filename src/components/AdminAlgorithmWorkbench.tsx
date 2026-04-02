@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, Expand, Hand, MapPinned, Play, RotateCcw, Route as RouteIcon, TimerReset, X } from 'lucide-react';
 import { findShortestHamiltonianCycle } from '../algorithms/hamiltonianCycle';
 import { findShortestHamiltonianPath } from '../algorithms/hamiltonianPath';
@@ -15,13 +16,13 @@ interface AdminAlgorithmWorkbenchProps {
 const MODE_LABELS: Record<AppMode, string> = {
   cycle: 'Chu trình Hamilton',
   path: 'Đường đi Hamilton',
-  subset: 'Lộ trình tùy chọn',
+  subset: 'Đường đi ngắn nhất',
 };
 
 const PREVIEW_LIMITS: Record<AppMode, { min: number; max: number }> = {
   cycle: { min: 5, max: 5 },
   path: { min: 5, max: 5 },
-  subset: { min: 2, max: 99 },
+  subset: { min: 2, max: Number.MAX_SAFE_INTEGER },
 };
 
 const PRESENTATION_HOLD_MS = 1800;
@@ -36,7 +37,22 @@ interface PresentationSegment {
 }
 
 function getPresetSelection(presets: PresetSelectionMap, mode: AppMode) {
-  return [...(presets[mode]?.ids ?? [])];
+  const preset = presets[mode];
+  const ids = [...(preset?.ids ?? [])];
+  if (preset?.startId && ids.includes(preset.startId)) {
+    return [preset.startId, ...ids.filter(id => id !== preset.startId)];
+  }
+  return ids;
+}
+
+function getPresetEndId(presets: PresetSelectionMap, mode: AppMode, presetIds: string[]) {
+  if (mode === 'cycle') return null;
+  const preset = presets[mode];
+  const startId = preset?.startId && presetIds.includes(preset.startId) ? preset.startId : presetIds[0] ?? null;
+  if (preset?.endId && presetIds.includes(preset.endId) && preset.endId !== startId) {
+    return preset.endId;
+  }
+  return presetIds.find(id => id !== startId) ?? null;
 }
 
 function uniqueIds(ids: string[]) {
@@ -96,6 +112,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
   });
   const [result, setResult] = useState<AlgorithmResult | null>(null);
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
+  const [isFullscreenReviewMap, setIsFullscreenReviewMap] = useState(false);
   const [presentationOpen, setPresentationOpen] = useState(false);
   const [presentationStatus, setPresentationStatus] = useState<'intro' | 'holding' | 'moving' | 'summary'>('intro');
   const [presentationStopIndex, setPresentationStopIndex] = useState(0);
@@ -116,7 +133,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
   );
   const activePath = useMemo(() => {
     if (!result?.found) return [];
-    return mode === 'path' ? result.shortestPath : (result.shortestCycles[0] ?? []);
+    return mode === 'cycle' ? (result.shortestCycles[0] ?? []) : result.shortestPath;
   }, [mode, result]);
   const highlightedPaths = useMemo(
     () => (result?.found && activePath.length > 0 ? [activePath] : []),
@@ -247,7 +264,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
     const presetIds = getPresetSelection(presets, mode).filter(id => graphData.locations.some(location => location.id === id));
     setSelectedIds(presetIds);
     setStartId(presetIds[0] ?? '');
-    setEndId(mode === 'path' && presetIds.length > 1 ? presetIds[presetIds.length - 1] : null);
+    setEndId(getPresetEndId(presets, mode, presetIds));
     setResult(null);
   }, [graphData.locations, mode, presets]);
 
@@ -266,7 +283,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
       setStartId(selectedIds[0]);
     }
 
-    if (mode === 'path') {
+    if (mode === 'path' || mode === 'subset') {
       const currentStart = selectedIds.includes(startId) ? startId : selectedIds[0];
       if (!endId || !selectedIds.includes(endId) || endId === currentStart) {
         setEndId(selectedIds.find(id => id !== currentStart) ?? null);
@@ -279,6 +296,25 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
   useEffect(() => {
     setResult(null);
   }, [graphData.locations, graphData.routes, mode, selectedIds, startId, endId]);
+
+  useEffect(() => {
+    if (!isFullscreenReviewMap) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFullscreenReviewMap(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreenReviewMap]);
 
   const resetPresentationState = useCallback(() => {
     if (holdTimerRef.current !== null) {
@@ -412,7 +448,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
     const presetIds = getPresetSelection(presets, mode).filter(id => graphData.locations.some(location => location.id === id));
     setSelectedIds(presetIds);
     setStartId(presetIds[0] ?? '');
-    setEndId(mode === 'path' && presetIds.length > 1 ? presetIds[presetIds.length - 1] : null);
+    setEndId(getPresetEndId(presets, mode, presetIds));
     setResult(null);
   }, [graphData.locations, mode, presets]);
 
@@ -440,8 +476,8 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
       return;
     }
 
-    if (normalizedIds.length < PREVIEW_LIMITS.subset.min || !startId) return;
-    setResult(findShortestSubsetRoute(graphData.locations, graphData.routes, normalizedIds, startId));
+    if (normalizedIds.length < PREVIEW_LIMITS.subset.min || !startId || !endId) return;
+    setResult(findShortestSubsetRoute(subsetLocations, subsetRoutes, startId, endId));
   }, [endId, graphData.locations, graphData.routes, mode, selectedIds, startId]);
 
   const handleOpenPresentation = useCallback(() => {
@@ -485,10 +521,196 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
 
   const canRun = startId !== ''
     && selectedIds.length >= limit.min
-    && (mode !== 'path' || (endId !== null && endId !== startId));
+    && (mode === 'cycle' || (endId !== null && endId !== startId));
   const statusText = mode === 'subset'
-    ? (selectedIds.length < limit.min ? `Chọn ít nhất ${limit.min} địa điểm để chạy thử.` : `${selectedIds.length} địa điểm đã sẵn sàng để giải thử.`)
+    ? (selectedIds.length < limit.min ? 'Chọn ít nhất 2 địa điểm cho tập cần xét.' : `${selectedIds.length} địa điểm đã nằm trong tập xét của Bài 3.`)
     : (selectedIds.length < limit.min ? `Chọn đủ ${limit.min} địa điểm để mô phỏng đúng bài toán.` : `Đã đủ ${limit.min} địa điểm để chạy thử.`);
+
+  const renderReviewMapCard = (mapHeightClass: string, fullscreen: boolean) => {
+    const polygonControls = displayLayoutMode === 'polygon' && orderedPolygonLocations.length > 0 && (
+      <div className={`rounded-2xl border border-slate-200 bg-slate-50 p-3 ${fullscreen ? 'h-full overflow-y-auto' : 'mt-3'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Thứ tự đỉnh đa giác</div>
+            <div className="mt-1 text-xs text-slate-500">Thầy có thể đổi vị trí từng đỉnh. Điểm xuất phát luôn cố định ở trên cùng.</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPolygonVertexOrders(current => ({ ...current, [mode]: suggestedPolygonOrder }))}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+          >
+            Đặt lại theo lời giải
+          </button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {orderedPolygonLocations.map((location, index) => {
+            const isStart = location.id === startId;
+            const movableOrder = displayLayoutOrder.filter(id => id !== startId);
+            const movableIndex = movableOrder.indexOf(location.id);
+            const canMoveUp = !isStart && movableIndex > 0;
+            const canMoveDown = !isStart && movableIndex < movableOrder.length - 1;
+
+            return (
+              <div key={location.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white bg-white px-3 py-2 shadow-sm">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[11px] font-black ${isStart ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
+                      {index + 1}
+                    </span>
+                    <div className="truncate text-sm font-bold text-slate-900">{location.fullName}</div>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {isStart ? 'Điểm bắt đầu, luôn ở đỉnh trên cùng.' : `${location.id} • Có thể đổi vị trí trong đa giác.`}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updatePolygonOrder(current => movePolygonVertex(current, location.id, 'up', startId))}
+                    disabled={!canMoveUp}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    title="Đưa đỉnh lên trước"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updatePolygonOrder(current => movePolygonVertex(current, location.id, 'down', startId))}
+                    disabled={!canMoveDown}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    title="Đưa đỉnh xuống sau"
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+    return (
+    <div className={`overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)] ${fullscreen ? 'flex h-full min-h-0 flex-col' : ''}`}>
+      <div className="border-b border-slate-100 px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+              {mode === 'subset' ? 'Bản đồ lời giải ngắn nhất' : 'Bản đồ theo tập điểm đã chọn'}
+            </div>
+            <div className="mt-1 text-sm text-slate-600">
+              {mode === 'subset'
+                ? 'Chỉ hiển thị tập địa điểm thầy đã chọn và các tuyến nối giữa chính các điểm đó.'
+                : 'Chỉ hiển thị các địa điểm đang chọn và các tuyến đường nối trực tiếp giữa chúng.'}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setDisplayLayoutMode('polygon')}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${displayLayoutMode === 'polygon' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}
+            >
+              Dàn đều đa giác
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayLayoutMode('geo')}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${displayLayoutMode === 'geo' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}
+            >
+              Theo bản đồ thật
+            </button>
+            {fullscreen ? null : (
+              <button
+                type="button"
+                onClick={() => setIsFullscreenReviewMap(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                title="Mở bản đồ toàn màn hình"
+              >
+                <Expand className="h-3.5 w-3.5" /> Toàn màn hình
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-800">
+          Chế độ <strong>dàn đều đa giác</strong> giúp các điểm không chồng lên nhau khi thầy kiểm tra từng bài toán. Điểm bắt đầu luôn được ghim ở đỉnh trên cùng và nền map sẽ tự ẩn để nhìn rõ sơ đồ.
+        </div>
+        {!fullscreen && polygonControls}
+      </div>
+      {fullscreen ? (
+        <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
+          {polygonControls ? polygonControls : <div className="hidden lg:block" />}
+          <div className="min-h-0">
+            {availableLocations.length === 0 ? (
+              <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm leading-7 text-slate-500">
+                Chưa có địa điểm nào được chọn để hiển thị trên bản đồ.
+              </div>
+            ) : (
+              <MapCanvas
+                locations={availableLocations}
+                routes={displayRoutes}
+                appMode={mode}
+                uiMode="view"
+                startId={startId}
+                endId={endId}
+                selectedSubset={selectedIds}
+                currentStep={null}
+                highlightedPaths={highlightedPaths}
+                activePathIndex={0}
+                selectedElement={selectedElement}
+                onLocationClick={() => {}}
+                onLocationDrag={() => {}}
+                onCanvasDoubleClick={() => {}}
+                onRouteClick={id => setSelectedElement({ type: 'route', id })}
+                onSelectElement={setSelectedElement}
+                edgeStart={null}
+                onEdgeStartSet={() => {}}
+                onAddRoute={() => {}}
+                showOrderedFlow={false}
+                animatePathVehicle={false}
+                displayLayoutMode={displayLayoutMode}
+                displayLayoutOrder={displayLayoutOrder}
+              />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className={`${mapHeightClass} min-h-0 p-4`}>
+          {availableLocations.length === 0 ? (
+            <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm leading-7 text-slate-500">
+              Chưa có địa điểm nào được chọn để hiển thị trên bản đồ.
+            </div>
+          ) : (
+            <MapCanvas
+              locations={availableLocations}
+              routes={displayRoutes}
+              appMode={mode}
+              uiMode="view"
+              startId={startId}
+              endId={endId}
+              selectedSubset={selectedIds}
+              currentStep={null}
+              highlightedPaths={highlightedPaths}
+              activePathIndex={0}
+              selectedElement={selectedElement}
+              onLocationClick={() => {}}
+              onLocationDrag={() => {}}
+              onCanvasDoubleClick={() => {}}
+              onRouteClick={id => setSelectedElement({ type: 'route', id })}
+              onSelectElement={setSelectedElement}
+              edgeStart={null}
+              onEdgeStartSet={() => {}}
+              onAddRoute={() => {}}
+              showOrderedFlow={false}
+              animatePathVehicle={false}
+              displayLayoutMode={displayLayoutMode}
+              displayLayoutOrder={displayLayoutOrder}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+  };
 
   return (
     <section className="space-y-6">
@@ -579,7 +801,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
                   {availableLocations.map(location => <option key={location.id} value={location.id}>{location.fullName}</option>)}
                 </select>
               </Field>
-              {mode === 'path' ? (
+              {mode !== 'cycle' ? (
                 <Field label="Điểm kết thúc">
                   <select value={endId ?? ''} onChange={event => setEndId(event.target.value || null)} className="field-input" title="Điểm kết thúc">
                     <option value="">Chọn điểm kết thúc</option>
@@ -590,9 +812,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
                 </Field>
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-                  {mode === 'cycle'
-                    ? 'Bài 1 sẽ khép vòng về lại điểm xuất phát sau khi đi qua đủ các điểm đã chọn.'
-                    : 'Bài 3 tìm chu trình tối ưu trên chính tập điểm mà thầy chọn ở bên trái.'}
+                  Bài 1 sẽ khép vòng về lại điểm xuất phát sau khi đi qua đủ các điểm đã chọn.
                 </div>
               )}
             </div>
@@ -608,131 +828,8 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
           </div>
 
           <div className="min-w-0">
-            <div className="mb-4 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-              <div className="border-b border-slate-100 px-5 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Bản đồ theo tập điểm đã chọn</div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      Chỉ hiển thị các địa điểm đang chọn và các tuyến đường nối trực tiếp giữa chúng.
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
-                    <button
-                      type="button"
-                      onClick={() => setDisplayLayoutMode('polygon')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${displayLayoutMode === 'polygon' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}
-                    >
-                      Dàn đều đa giác
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDisplayLayoutMode('geo')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${displayLayoutMode === 'geo' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}
-                    >
-                      Theo bản đồ thật
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-800">
-                  Chế độ <strong>dàn đều đa giác</strong> giúp các điểm không chồng lên nhau khi thầy kiểm tra từng bài toán. Điểm bắt đầu luôn được ghim ở đỉnh trên cùng và nền map sẽ tự ẩn để nhìn rõ sơ đồ.
-                </div>
-                {displayLayoutMode === 'polygon' && orderedPolygonLocations.length > 0 && (
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Thứ tự đỉnh đa giác</div>
-                        <div className="mt-1 text-xs text-slate-500">Thầy có thể đổi vị trí từng đỉnh. Điểm xuất phát luôn cố định ở trên cùng.</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPolygonVertexOrders(current => ({ ...current, [mode]: suggestedPolygonOrder }))}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                      >
-                        Đặt lại theo lời giải
-                      </button>
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      {orderedPolygonLocations.map((location, index) => {
-                        const isStart = location.id === startId;
-                        const movableOrder = displayLayoutOrder.filter(id => id !== startId);
-                        const movableIndex = movableOrder.indexOf(location.id);
-                        const canMoveUp = !isStart && movableIndex > 0;
-                        const canMoveDown = !isStart && movableIndex < movableOrder.length - 1;
-
-                        return (
-                          <div key={location.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white bg-white px-3 py-2 shadow-sm">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[11px] font-black ${isStart ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
-                                  {index + 1}
-                                </span>
-                                <div className="truncate text-sm font-bold text-slate-900">{location.fullName}</div>
-                              </div>
-                              <div className="mt-1 text-xs text-slate-500">
-                                {isStart ? 'Điểm bắt đầu, luôn ở đỉnh trên cùng.' : `${location.id} • Có thể đổi vị trí trong đa giác.`}
-                              </div>
-                            </div>
-                            <div className="flex shrink-0 gap-2">
-                              <button
-                                type="button"
-                                onClick={() => updatePolygonOrder(current => movePolygonVertex(current, location.id, 'up', startId))}
-                                disabled={!canMoveUp}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                title="Đưa đỉnh lên trước"
-                              >
-                                <ArrowUp className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updatePolygonOrder(current => movePolygonVertex(current, location.id, 'down', startId))}
-                                disabled={!canMoveDown}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                title="Đưa đỉnh xuống sau"
-                              >
-                                <ArrowDown className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="h-[25rem] p-4">
-                {availableLocations.length === 0 ? (
-                  <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm leading-7 text-slate-500">
-                    Chưa có địa điểm nào được chọn để hiển thị trên bản đồ.
-                  </div>
-                ) : (
-                  <MapCanvas
-                    locations={availableLocations}
-                    routes={displayRoutes}
-                    appMode={mode}
-                    uiMode="view"
-                    startId={startId}
-                    endId={endId}
-                    selectedSubset={selectedIds}
-                    currentStep={null}
-                    highlightedPaths={highlightedPaths}
-                    activePathIndex={0}
-                    selectedElement={selectedElement}
-                    onLocationClick={() => {}}
-                    onLocationDrag={() => {}}
-                    onCanvasDoubleClick={() => {}}
-                    onRouteClick={id => setSelectedElement({ type: 'route', id })}
-                    onSelectElement={setSelectedElement}
-                    edgeStart={null}
-                    onEdgeStartSet={() => {}}
-                    onAddRoute={() => {}}
-                    showOrderedFlow={false}
-                    animatePathVehicle={false}
-                    displayLayoutMode={displayLayoutMode}
-                    displayLayoutOrder={displayLayoutOrder}
-                  />
-                )}
-              </div>
+            <div className="mb-4">
+              {renderReviewMapCard('h-[25rem]', false)}
             </div>
 
             {!result ? (
@@ -754,9 +851,9 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
                   <div className="text-right">
                     <div className="text-2xl font-black text-emerald-700">{result.totalDistanceKm.toFixed(1)} km</div>
                     <div className="text-xs text-slate-500">
-                      {mode === 'path'
-                        ? 'Đường đi đại diện ngắn nhất'
-                        : `${result.allCycles.length} phương án hợp lệ, lấy 1 phương án tối ưu đại diện`}
+                      {mode === 'cycle'
+                        ? `${result.allCycles.length} phương án hợp lệ, lấy 1 phương án tối ưu đại diện`
+                        : 'Đường đi đại diện ngắn nhất'}
                     </div>
                   </div>
                 </div>
@@ -817,6 +914,30 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
           </div>
         </div>
       </div>
+
+      {isFullscreenReviewMap && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[10030] bg-[#e8e1d4]">
+          <div className="flex h-full flex-col p-4 sm:p-6">
+            <div className="mb-3 flex items-center justify-between rounded-2xl bg-white/95 px-4 py-3 shadow-lg">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Algorithm review map</div>
+                <div className="text-lg font-bold text-slate-900">Bản đồ review toàn màn hình</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFullscreenReviewMap(false)}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" /> Đóng
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {renderReviewMapCard('h-full', true)}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {presentationOpen && result?.found && (
         <div className="fixed inset-0 z-[10040] bg-[#120b10] text-white">
