@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, RotateCcw, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, Expand, RotateCcw, ShieldCheck, X } from 'lucide-react';
 import { TouristLocation, Route, AppMode, AlgorithmResult, AlgorithmStep, SelectedElement } from '../types';
-import { GraphCanvas } from './GraphCanvas';
+import { MapCanvas } from './MapCanvas';
 import { GraphLegend } from './GraphLegend';
+import { LocationInsightPanel } from './LocationInsightPanel';
 import { SolutionPanel } from './SolutionPanel';
 import { StepNavigator } from './StepNavigator';
 
@@ -26,6 +28,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [activePathIndex, setActivePathIndex] = useState(0);
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [detailMode, setDetailMode] = useState<'result' | 'method'>('result');
+  const [isFullscreenMap, setIsFullscreenMap] = useState(false);
 
   // Auto-stop at end
   useEffect(() => {
@@ -46,6 +49,25 @@ export const GraphView: React.FC<GraphViewProps> = ({
     const t = setTimeout(() => setIsPlaying(true), 400);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (!isFullscreenMap) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFullscreenMap(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreenMap]);
 
   const handleNext = useCallback(() => {
     if (!result) return;
@@ -90,18 +112,81 @@ export const GraphView: React.FC<GraphViewProps> = ({
         <div className="text-xs text-slate-500 ml-auto">
           {locations.length} điểm · {routes.length} tuyến đường
         </div>
+
+        <button
+          onClick={() => setIsFullscreenMap(true)}
+          className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          title="Mở toàn màn hình bản đồ"
+        >
+          <Expand className="w-3.5 h-3.5" /> Toàn màn hình
+        </button>
+
         <button onClick={onRerun}
           className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-600">
           <RotateCcw className="w-3.5 h-3.5" /> Chạy lại
         </button>
       </div>
 
+      {isFullscreenMap && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-[#e8e1d4]">
+          <div className="flex h-full flex-col p-4 sm:p-6">
+            <div className="mb-3 flex items-center justify-between rounded-2xl bg-white/95 px-4 py-3 shadow-lg">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Full Screen Map</div>
+                <div className="text-lg font-bold text-slate-900">Bản đồ lộ trình tương tác</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFullscreenMap(false)}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" /> Đóng
+              </button>
+            </div>
+            <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+              <div className="overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-2xl">
+                <MapCanvas
+                  locations={locations}
+                  routes={routes}
+                  appMode={appMode}
+                  uiMode="view"
+                  startId={startId}
+                  endId={endId}
+                  selectedSubset={locations.map(l => l.id)}
+                  currentStep={currentStep}
+                  highlightedPaths={highlightedPaths}
+                  activePathIndex={activePathIndex}
+                  selectedElement={selectedElement}
+                  onLocationClick={() => {}}
+                  onLocationDrag={() => {}}
+                  onCanvasDoubleClick={() => {}}
+                  onRouteClick={() => {}}
+                  onSelectElement={setSelectedElement}
+                  edgeStart={null}
+                  onEdgeStartSet={() => {}}
+                  onAddRoute={() => {}}
+                />
+              </div>
+              <div className="overflow-y-auto rounded-[28px] border border-white/20 bg-white p-3 shadow-2xl">
+                <LocationInsightPanel
+                  selectedElement={selectedElement}
+                  locations={locations}
+                  routes={routes}
+                  appMode={appMode}
+                />
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas */}
         <main className="flex-1 flex flex-col overflow-hidden p-3 gap-2 min-w-0">
           <div className="relative flex-1 overflow-hidden">
-            <GraphCanvas
+            <MapCanvas
               locations={locations}
               routes={routes}
               appMode={appMode}
@@ -120,8 +205,16 @@ export const GraphView: React.FC<GraphViewProps> = ({
               onSelectElement={setSelectedElement}
               edgeStart={null}
               onEdgeStartSet={() => {}}
-              onAddRoute={() => { /* view-only */ }}
+              onAddRoute={() => {}}
             />
+            <button
+              type="button"
+              onClick={() => setIsFullscreenMap(true)}
+              className="absolute left-3 top-3 z-[600] inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/92 px-4 py-2 text-sm font-semibold text-slate-800 shadow-[0_14px_26px_rgba(15,23,42,0.14)] backdrop-blur hover:bg-white"
+              title="Mở toàn màn hình bản đồ"
+            >
+              <Expand className="h-4 w-4" /> Xem toàn màn hình
+            </button>
             <GraphLegend appMode={appMode} />
           </div>
 
@@ -139,7 +232,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         </main>
 
         {/* Right: solution */}
-        <aside className="w-72 bg-white border-l border-slate-200 flex flex-col overflow-hidden shrink-0">
+        <aside className="w-[25rem] bg-white border-l border-slate-200 flex flex-col overflow-hidden shrink-0">
           <div className="border-b border-slate-100 px-3 py-2">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Kết Quả & Diễn Giải
@@ -164,6 +257,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
                 Lớp 2: Cách làm
               </button>
             </div>
+          </div>
+          <div className="border-b border-slate-100 p-3">
+            <LocationInsightPanel
+              selectedElement={selectedElement}
+              locations={locations}
+              routes={routes}
+              appMode={appMode}
+            />
           </div>
           <div className="flex-1 overflow-hidden">
             <SolutionPanel

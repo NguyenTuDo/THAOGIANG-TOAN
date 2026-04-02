@@ -35,6 +35,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'School visitors, alumni, parents',
     highlights: ['Mặt tiền cổ', 'Không khí học đường', 'Thuận tiện nối tour quận 3'],
     highlightsEn: ['Historic facade', 'School atmosphere', 'Convenient for District 3 tour'],
+    lat: 10.7740, lng: 106.6951,
     x: 420, y: 285,
   },
   {
@@ -55,6 +56,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Short walks, coffee, street photography',
     highlights: ['Không gian mở', 'Nhiều quán cà phê', 'Rất gần Marie Curie'],
     highlightsEn: ['Open plaza', 'Many coffee shops', 'Steps from Marie Curie'],
+    lat: 10.7774, lng: 106.6955,
     x: 520, y: 240,
   },
   {
@@ -75,6 +77,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'International visitors, student groups, history enthusiasts',
     highlights: ['Triển lãm chuyên đề', 'Nội dung lịch sử', 'Đi bộ được từ trường'],
     highlightsEn: ['Thematic exhibitions', 'Extensive historical content', 'Walkable from school'],
+    lat: 10.7795, lng: 106.6874,
     x: 315, y: 225,
   },
   {
@@ -95,6 +98,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Architecture and urban history enthusiasts',
     highlights: ['Kiến trúc hiện đại', 'Không gian rộng', 'Rất thuận trục tour'],
     highlightsEn: ['Mid-century modern architecture', 'Spacious grounds', 'Central tour axis'],
+    lat: 10.7799, lng: 106.6957,
     x: 410, y: 190,
   },
   {
@@ -115,6 +119,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Young visitors, photo stops, community activities',
     highlights: ['Nhiều sự kiện', 'Không khí trẻ trung', 'Gần cụm Đức Bà'],
     highlightsEn: ['Frequent events', 'Youthful atmosphere', 'Near Notre-Dame cluster'],
+    lat: 10.7806, lng: 106.7009,
     x: 560, y: 190,
   },
   {
@@ -135,6 +140,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Gift shopping, street food, local market exploration',
     highlights: ['Khu chợ lâu năm', 'Nhiều hàng ăn', 'Màu sắc bản địa'],
     highlightsEn: ['Long-established market', 'Street food stalls', 'Authentic local colours'],
+    lat: 10.7923, lng: 106.6946,
     x: 650, y: 145,
   },
   {
@@ -155,6 +161,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Rest stops, light walks, outdoor photography',
     highlights: ['Nhiều bóng cây', 'Dễ ghép với Dinh Thống Nhất', 'Không khí thư giãn'],
     highlightsEn: ['Plenty of shade', 'Pairs well with Reunification Palace', 'Relaxed atmosphere'],
+    lat: 10.7771, lng: 106.6868,
     x: 300, y: 300,
   },
   {
@@ -175,6 +182,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Photography, architecture, first-time Saigon visitors',
     highlights: ['Mặt tiền biểu tượng', 'Cụm du lịch trung tâm', 'Dễ nối sang Bưu điện'],
     highlightsEn: ['Iconic façade', 'Central tourist cluster', 'Easy connection to Post Office'],
+    lat: 10.7798, lng: 106.6992,
     x: 520, y: 135,
   },
   {
@@ -195,6 +203,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Photography, admiring architecture, central city strolls',
     highlights: ['Kiến trúc cổ', 'Gần Nhà Thờ Đức Bà', 'Hợp cho khách quốc tế'],
     highlightsEn: ['Historic architecture', 'Next to Notre-Dame', 'Great for international visitors'],
+    lat: 10.7798, lng: 106.6999,
     x: 575, y: 140,
   },
   {
@@ -215,6 +224,7 @@ export const INITIAL_LOCATIONS: TouristLocation[] = [
     bestForEn: 'Coffee, books, mid-tour rest',
     highlights: ['Phố đi bộ ngắn', 'Nhiều quầy sách', 'Không khí thư thái'],
     highlightsEn: ['Pedestrian street', 'Many book stalls', 'Peaceful atmosphere'],
+    lat: 10.7812, lng: 106.6990,
     x: 625, y: 205,
   },
 ];

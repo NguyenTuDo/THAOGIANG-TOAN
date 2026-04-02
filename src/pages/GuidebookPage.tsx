@@ -84,6 +84,16 @@ export function GuidebookPage() {
     writeLocalDraft({ selectedIds, endId, appMode });
   }, [selectedIds, endId, appMode]);
 
+  // Cleanup: filter out any selected IDs that no longer exist in the system
+  useEffect(() => {
+    if (graphData.locations.length > 0) {
+      setSelectedIds(prev => {
+        const valid = prev.filter(id => graphData.locations.some(l => l.id === id));
+        return valid.length === prev.length ? prev : valid;
+      });
+    }
+  }, [graphData.locations]);
+
   const MAX: Record<AppMode, number> = { cycle: 5, path: 5, subset: 99 };
 
   const handleToggle = useCallback((id: string) => {
