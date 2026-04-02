@@ -20,6 +20,7 @@ export function findShortestHamiltonianPath(
   if (startId === endId) {
     return {
       found: false,
+      allCycles: [],
       shortestCycles: [],
       shortestPath: [],
       totalDistanceKm: 0,
@@ -132,7 +133,7 @@ export function findShortestHamiltonianPath(
       explanation: `⚠️ Số bước vượt quá giới hạn (${MAX_STEPS.toLocaleString()}). Đồ thị quá phức tạp.`,
       isBacktracking: false,
     });
-    return { found: false, shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
+    return { found: false, allCycles: [], shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
   }
 
   if (allPaths.length === 0) {
@@ -144,7 +145,7 @@ export function findShortestHamiltonianPath(
       explanation: `Không tìm thấy đường đi Hamilton nào từ "${getName(startId)}" đến "${getName(endId)}".`,
       isBacktracking: false,
     });
-    return { found: false, shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
+    return { found: false, allCycles: [], shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
   }
 
   const minWeight = Math.min(...allPaths.map(p => p.weight));
@@ -161,6 +162,7 @@ export function findShortestHamiltonianPath(
 
   return {
     found: true,
+    allCycles: [],
     shortestCycles: [],
     shortestPath: best.path,
     totalDistanceKm: minWeight,

@@ -35,14 +35,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
     if (result && currentStepIdx >= result.steps.length - 1) setIsPlaying(false);
   }, [currentStepIdx, result]);
 
-  // Cycle multiple optimal paths
-  useEffect(() => {
-    if (!result || result.shortestCycles.length <= 1) return;
-    const interval = setInterval(() => {
-      setActivePathIndex(prev => (prev + 1) % result.shortestCycles.length);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [result]);
+  // Bài 1: không luân phiên nữa — luôn dùng chu trình đại diện đầu tiên (index 0)
+  // (Toàn bộ chu trình được liệt kê trong SolutionPanel)
 
   // Auto-play on mount
   useEffect(() => {
@@ -272,7 +266,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
               currentStepIdx={currentStepIdx}
               appMode={appMode}
               locations={locations}
-              activePathIndex={activePathIndex}
+              routes={routes}
               detailMode={detailMode}
             />
           </div>

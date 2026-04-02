@@ -48,14 +48,14 @@ export function findShortestSubsetRoute(
 
   if (selectedIds.length < 2) {
     return {
-      found: false, shortestCycles: [], shortestPath: [], totalDistanceKm: 0,
+      found: false, allCycles: [], shortestCycles: [], shortestPath: [], totalDistanceKm: 0,
       steps: [errorStep('Vui lòng chọn ít nhất 2 địa điểm để tìm lộ trình.')],
     };
   }
 
   if (!selectedIds.includes(startId)) {
     return {
-      found: false, shortestCycles: [], shortestPath: [], totalDistanceKm: 0,
+      found: false, allCycles: [], shortestCycles: [], shortestPath: [], totalDistanceKm: 0,
       steps: [errorStep('Điểm xuất phát phải nằm trong tập địa điểm đã chọn.')],
     };
   }
@@ -63,7 +63,7 @@ export function findShortestSubsetRoute(
   // Kiểm tra liên thông
   if (!isConnected(selectedIds, allRoutes)) {
     return {
-      found: false, shortestCycles: [], shortestPath: [], totalDistanceKm: 0,
+      found: false, allCycles: [], shortestCycles: [], shortestPath: [], totalDistanceKm: 0,
       steps: [errorStep('Một số địa điểm đã chọn không thể kết nối với nhau qua tập tuyến đường hiện có. Vui lòng thêm tuyến hoặc chọn lại.')],
     };
   }

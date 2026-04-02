@@ -100,7 +100,8 @@ export interface AlgorithmStep {
 
 export interface AlgorithmResult {
   found: boolean;
-  shortestCycles: string[][];  // Bài 1 & 3: tất cả chu trình ngắn nhất (cùng trọng số)
+  allCycles: { path: string[]; weight: number }[]; // Bài 1 & 3: toàn bộ chu trình tìm được (đã khử nghịch đảo), sắp xếp theo weight
+  shortestCycles: string[][];  // Bài 1 & 3: chu trình ngắn nhất (cùng trọng số) — shortestCycles[0] là đại diện
   shortestPath: string[];      // Bài 2: đường đi ngắn nhất tìm được
   totalDistanceKm: number;
   steps: AlgorithmStep[];

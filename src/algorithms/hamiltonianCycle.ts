@@ -140,7 +140,7 @@ export function findShortestHamiltonianCycle(
       explanation: `⚠️ Số bước vượt quá giới hạn (${MAX_STEPS.toLocaleString()}). Đồ thị quá phức tạp.`,
       isBacktracking: false,
     });
-    return { found: false, shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
+    return { found: false, allCycles: [], shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
   }
 
   if (allCycles.length === 0) {
@@ -152,7 +152,7 @@ export function findShortestHamiltonianCycle(
       explanation: 'Không tìm thấy chu trình Hamilton nào trong đồ thị này.',
       isBacktracking: false,
     });
-    return { found: false, shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
+    return { found: false, allCycles: [], shortestCycles: [], shortestPath: [], totalDistanceKm: 0, steps };
   }
 
   // Lọc chu trình ngắn nhất
@@ -168,8 +168,12 @@ export function findShortestHamiltonianCycle(
     isBacktracking: false,
   });
 
+  // Sắp xếp toàn bộ chu trình theo khoảng cách tăng dần
+  const sortedAllCycles = [...allCycles].sort((a, b) => a.weight - b.weight);
+
   return {
     found: true,
+    allCycles: sortedAllCycles,
     shortestCycles,
     shortestPath: [],
     totalDistanceKm: minWeight,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouristLocation, AlgorithmResult, AlgorithmStep, AppMode } from '../types';
+import { TouristLocation, Route, AlgorithmResult, AlgorithmStep, AppMode } from '../types';
 import { PathDisplay } from './PathDisplay';
 
 interface SolutionPanelProps {
@@ -7,7 +7,7 @@ interface SolutionPanelProps {
   currentStepIdx: number;
   appMode: AppMode;
   locations: TouristLocation[];
-  activePathIndex: number;
+  routes: Route[];
   detailMode: 'result' | 'method';
 }
 
@@ -26,9 +26,16 @@ const STEP_ICONS = {
 };
 
 export const SolutionPanel: React.FC<SolutionPanelProps> = ({
-  result, currentStepIdx, appMode, locations, activePathIndex, detailMode,
+  result, currentStepIdx, appMode, locations, routes, detailMode,
 }) => {
   const currentStep: AlgorithmStep | undefined = result?.steps[currentStepIdx];
+
+  const getSegmentDist = (fromId: string, toId: string): number | null => {
+    const r = routes.find(
+      rt => (rt.from === fromId && rt.to === toId) || (rt.to === fromId && rt.from === toId)
+    );
+    return r ? r.distanceKm : null;
+  };
 
   const getName = (id: string) => locations.find(l => l.id === id)?.fullName ?? id;
 
@@ -48,46 +55,160 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
   const activePath =
     appMode === 'path'
       ? result.shortestPath
-      : result.shortestCycles[activePathIndex] ?? result.shortestCycles[0] ?? [];
+      : result.shortestCycles[0] ?? [];
+
+  const getShort = (id: string) => {
+    const label = locations.find(l => l.id === id)?.label ?? id;
+    return label.split('\n')[0];
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-slate-100 p-3">
-        <PathDisplay
-          path={activePath}
-          totalKm={result.totalDistanceKm}
-          locations={locations}
-          appMode={appMode}
-          allCount={appMode === 'path' ? (result.shortestPath.length > 0 ? 1 : 0) : result.shortestCycles.length}
-        />
+        {result.found ? (
+          <PathDisplay
+            path={activePath}
+            totalKm={result.totalDistanceKm}
+            locations={locations}
+            appMode={appMode}
+            allCount={1}
+          />
+        ) : (
+          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-700">
+            <span>✗</span>
+            <span>{appMode === 'path' ? 'Không tìm thấy đường đi Hamilton' : 'Không tìm thấy chu trình Hamilton'}</span>
+          </div>
+        )}
       </div>
 
       {detailMode === 'result' ? (
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-xs leading-6 text-emerald-800">
-            <div className="font-bold">Lớp 1: Kết quả trực quan</div>
-            <div className="mt-1">
-              Xem ngay tuyến đường tốt nhất trên bản đồ. Mỗi điểm chỉ đi qua một lần; nếu là chu trình thì bước cuối chỉ khép vòng về điểm đầu.
+        !result.found ? (
+          <div className="flex-1 overflow-y-auto px-3 py-3">
+            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs leading-6 text-red-700">
+              <div className="font-bold">Không có lời giải</div>
+              <div className="mt-1">
+                {appMode === 'cycle'
+                  ? 'Không tồn tại chu trình Hamilton trong đồ thị này. Thử chọn bộ điểm khác hoặc thêm tuyến đường kết nối.'
+                  : appMode === 'path'
+                    ? 'Không tồn tại đường đi Hamilton từ điểm đầu đến điểm cuối.'
+                    : 'Không tồn tại chu trình Hamilton trên tập điểm đã chọn.'}
+              </div>
             </div>
           </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
 
-          <div className="mt-3 rounded-xl border border-slate-100 bg-white p-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tóm tắt nhanh</div>
-            <div className="mt-2 space-y-2 text-xs text-slate-700">
-              <div><strong>Số điểm tham gia:</strong> {locations.length}</div>
-              <div><strong>Tổng chiều dài:</strong> {result.totalDistanceKm.toFixed(1)} km</div>
-              <div><strong>Dạng lời giải:</strong> {appMode === 'path' ? 'Đường đi Hamilton' : 'Chu trình Hamilton / vòng khép kín'}</div>
-              <div><strong>Cách trình bày:</strong> xem đường tô nổi trước, chỉ chuyển sang lớp sau khi cần giải thích cách thuật toán thử và quay lui.</div>
-            </div>
-          </div>
+            {/* ── BẢNG TOÀN BỘ CHU TRÌNH (chỉ Bài 1 & Bài 3) ── */}
+            {appMode !== 'path' && result.allCycles.length > 0 && (
+              <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Toàn bộ chu trình Hamilton ({result.allCycles.length} phương án)
+                  </div>
+                </div>
+                <table className="w-full text-[10px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/60">
+                      <th className="px-2 py-1 text-left font-semibold text-slate-400">#</th>
+                      <th className="px-2 py-1 text-left font-semibold text-slate-400">Chu trình</th>
+                      <th className="px-2 py-1 text-right font-semibold text-slate-400">km</th>
+                      <th className="px-2 py-1 text-center font-semibold text-slate-400"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.allCycles.map((cycle, idx) => {
+                      const isOptimal = Math.abs(cycle.weight - result.totalDistanceKm) < 0.001;
+                      // Hiển thị các node không lặp (cắt node cuối trùng với node đầu)
+                      const nodes = cycle.path.length > 1 && cycle.path[0] === cycle.path[cycle.path.length - 1]
+                        ? cycle.path.slice(0, -1)
+                        : cycle.path;
+                      return (
+                        <tr
+                          key={idx}
+                          className={`border-b border-slate-50 ${isOptimal ? 'bg-emerald-50/60' : ''}`}
+                        >
+                          <td className="px-2 py-1 font-mono text-slate-400">{idx + 1}.</td>
+                          <td className="px-2 py-1 text-slate-700">
+                            {nodes.map((id, ni) => (
+                              <React.Fragment key={ni}>
+                                <span className={isOptimal ? 'font-semibold text-emerald-800' : ''}>{getShort(id)}</span>
+                                {ni < nodes.length - 1 && <span className="mx-0.5 text-slate-300">→</span>}
+                              </React.Fragment>
+                            ))}
+                            <span className="mx-0.5 text-slate-300">→</span>
+                            <span className={`italic ${isOptimal ? 'text-emerald-700' : 'text-slate-400'}`}>↩{getShort(nodes[0])}</span>
+                          </td>
+                          <td className={`whitespace-nowrap px-2 py-1 text-right font-semibold ${isOptimal ? 'text-emerald-700' : 'text-slate-500'}`}>
+                            {cycle.weight.toFixed(1)}
+                          </td>
+                          <td className="px-2 py-1 text-center">
+                            {isOptimal && <span className="text-emerald-600">★</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-          <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs leading-6 text-slate-600">
-            <div className="font-bold text-slate-800">Lớp 2 nằm phía sau</div>
-            <div className="mt-1">
-              Bấm sang tab <strong>Diễn giải cách làm</strong> để xem trạng thái từng điểm, bước quay lui và nhật ký thuật toán.
+            {/* ── PHƯƠNG ÁN ĐẠI DIỆN (tối ưu) ── */}
+            <div className="overflow-hidden rounded-xl border border-emerald-100 bg-white">
+              <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50/40 px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                  {appMode === 'path' ? 'Đường đi tối ưu' : 'Chu trình tối ưu — phương án đại diện'}
+                </div>
+                <div className="text-xs font-black text-emerald-700">
+                  {result.totalDistanceKm.toFixed(1)} km
+                </div>
+              </div>
+              <table className="w-full text-xs">
+                <tbody>
+                  {activePath.slice(0, -1).map((nodeId, segIdx) => {
+                    const nextId = activePath[segIdx + 1];
+                    const dist = getSegmentDist(nodeId, nextId);
+                    const isCycleReturn = appMode !== 'path' && segIdx === activePath.length - 2;
+                    return (
+                      <tr
+                        key={segIdx}
+                        className={`border-b border-slate-50 ${isCycleReturn ? 'bg-slate-50/60' : ''}`}
+                      >
+                        <td className="w-5 px-2 py-1.5 font-mono text-[9px] text-slate-300">
+                          {segIdx + 1}.
+                        </td>
+                        <td className="px-2 py-1.5 text-slate-700">
+                          <span className="font-semibold">{getName(nodeId)}</span>
+                          <span className="mx-1 text-slate-400">→</span>
+                          <span className={`font-semibold ${isCycleReturn ? 'italic text-slate-500' : ''}`}>
+                            {isCycleReturn && '↩ '}{getName(nextId)}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right font-semibold text-slate-500">
+                          {dist !== null ? `${dist.toFixed(1)} km` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-emerald-100 bg-emerald-50">
+                    <td colSpan={2} className="px-2 py-2 text-xs font-bold text-emerald-700">
+                      Tổng cộng
+                    </td>
+                    <td className="px-2 py-2 text-right text-sm font-black text-emerald-800">
+                      {result.totalDistanceKm.toFixed(1)} km
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[10px] leading-5 text-slate-600">
+              <span className="font-bold text-slate-700">Lớp 2 — Diễn giải cách làm: </span>
+              Bấm tab <strong>Cách làm</strong> để xem từng bước thử và quay lui của thuật toán.
             </div>
           </div>
-        </div>
+        )
       ) : (
         <>
           {currentStep && (
