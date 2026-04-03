@@ -1,5 +1,6 @@
 import { AppMode, GraphData, PresetSelection, PresetSelectionMap, Route, TouristLocation } from '../types';
 import { getSupabase, hasSupabaseConfig } from './supabase';
+import { INITIAL_GRAPH_DATA, PRESET_SELECTIONS } from '../data/hcmcLocations';
 
 export const TOURIST_DATA_CHANGED_EVENT = 'tourist-data-changed';
 
@@ -128,7 +129,12 @@ export async function loadGraphData(): Promise<GraphData> {
       supabase.from('routes').select('*'),
     ]);
 
-    if (locResult.error || routeResult.error) throw new Error('fetch failed');
+    if (locResult.error || routeResult.error) {
+      throw new Error([
+        locResult.error?.message,
+        routeResult.error?.message,
+      ].filter(Boolean).join(' | ') || 'fetch failed');
+    }
 
     const graphData = normalizeGraphData({
       locations: (locResult.data as TouristLocation[]) ?? [],
@@ -137,8 +143,13 @@ export async function loadGraphData(): Promise<GraphData> {
 
     writeLocalGraphData(graphData, { emitEvent: false });
     return graphData;
-  } catch {
-    return readLocalGraphData();
+  } catch (error) {
+    console.error('loadGraphData failed:', error);
+    const localData = readLocalGraphData();
+    if (localData.locations.length > 0 || localData.routes.length > 0) {
+      return localData;
+    }
+    return normalizeGraphData(INITIAL_GRAPH_DATA);
   }
 }
 
@@ -255,8 +266,16 @@ export async function loadPresets(): Promise<PresetSelectionMap> {
       return presets;
     }
     return localPresets;
-  } catch {
-    return localPresets;
+  } catch (error) {
+    console.error('loadPresets failed:', error);
+    if (
+      localPresets.cycle.ids.length > 0 ||
+      localPresets.path.ids.length > 0 ||
+      localPresets.subset.ids.length > 0
+    ) {
+      return localPresets;
+    }
+    return PRESET_SELECTIONS;
   }
 }
 
