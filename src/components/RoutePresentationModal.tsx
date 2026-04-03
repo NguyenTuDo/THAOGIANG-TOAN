@@ -32,6 +32,20 @@ const MODE_LABELS: Record<AppMode, string> = {
 };
 
 const PRESENTATION_HOLD_MS = 1800;
+const DEFAULT_CENTER = { lat: 10.7799, lng: 106.6957 };
+const FALLBACK_LAT_SCALE = 0.00008;
+const FALLBACK_LNG_SCALE = 0.00008;
+
+function getRenderableLatLng(location: TouristLocation): { lat: number; lng: number } {
+  if (typeof location.lat === 'number' && typeof location.lng === 'number') {
+    return { lat: location.lat, lng: location.lng };
+  }
+
+  return {
+    lat: DEFAULT_CENTER.lat + (300 - location.y) * FALLBACK_LAT_SCALE,
+    lng: DEFAULT_CENTER.lng + (location.x - 450) * FALLBACK_LNG_SCALE,
+  };
+}
 
 export function RoutePresentationModal({
   open,
@@ -135,6 +149,11 @@ export function RoutePresentationModal({
     [locations, presentationFocusLocationId],
   );
 
+  const locationPositions = useMemo(
+    () => new Map(locations.map(location => [location.id, getRenderableLatLng(location)])),
+    [locations],
+  );
+
   const presentationDisplayIndex = useMemo(() => {
     if (activePath.length === 0) return 0;
     if (presentationStatus === 'moving') {
@@ -160,6 +179,83 @@ export function RoutePresentationModal({
     () => presentationSegments[Math.min(presentationStopIndex, Math.max(presentationSegments.length - 1, 0))] ?? null,
     [presentationSegments, presentationStopIndex],
   );
+
+  const presentationVehicleRotation = useMemo(() => {
+    if (presentationStatus === 'intro' || presentationSegments.length === 0) {
+      return null;
+    }
+
+    if (presentationStatus === 'moving' && currentPresentationSegment) {
+      const from = locationPositions.get(currentPresentationSegment.fromId);
+      const to = locationPositions.get(currentPresentationSegment.toId);
+      if (!from || !to) {
+        return null;
+      }
+
+      const lngScale = Math.max(Math.cos((((from.lat + to.lat) / 2) * Math.PI) / 180), 0.3);
+      const dx = (to.lng - from.lng) * lngScale;
+      const dy = from.lat - to.lat;
+      return (Math.atan2(dy, dx) * 180) / Math.PI;
+    }
+
+    const nextSegment = presentationSegments[presentationStopIndex] ?? null;
+    if (nextSegment) {
+      const from = locationPositions.get(nextSegment.fromId);
+      const to = locationPositions.get(nextSegment.toId);
+      if (!from || !to) {
+        return null;
+      }
+
+      const lngScale = Math.max(Math.cos((((from.lat + to.lat) / 2) * Math.PI) / 180), 0.3);
+      const dx = (to.lng - from.lng) * lngScale;
+      const dy = from.lat - to.lat;
+      return (Math.atan2(dy, dx) * 180) / Math.PI;
+    }
+
+    const previousSegment = presentationSegments[Math.max(presentationSegments.length - 1, 0)] ?? null;
+    if (!previousSegment) {
+      return null;
+    }
+
+    const from = locationPositions.get(previousSegment.fromId);
+    const to = locationPositions.get(previousSegment.toId);
+    if (!from || !to) {
+      return null;
+    }
+
+    const lngScale = Math.max(Math.cos((((from.lat + to.lat) / 2) * Math.PI) / 180), 0.3);
+    const dx = (to.lng - from.lng) * lngScale;
+    const dy = from.lat - to.lat;
+    return (Math.atan2(dy, dx) * 180) / Math.PI;
+  }, [currentPresentationSegment, locationPositions, presentationSegments, presentationStatus, presentationStopIndex]);
+
+  const presentationVehiclePosition = useMemo(() => {
+    if (presentationStatus === 'intro' || activePath.length === 0) {
+      return null;
+    }
+
+    if (presentationStatus === 'moving' && currentPresentationSegment) {
+      const from = locationPositions.get(currentPresentationSegment.fromId);
+      const to = locationPositions.get(currentPresentationSegment.toId);
+      if (!from || !to) {
+        return null;
+      }
+
+      const segmentSpan = Math.max(currentPresentationSegment.cumulativeEnd - currentPresentationSegment.cumulativeStart, 0.00001);
+      const localProgress = Math.min(
+        Math.max((presentationVehicleProgress - currentPresentationSegment.cumulativeStart) / segmentSpan, 0),
+        1,
+      );
+
+      return {
+        lat: from.lat + (to.lat - from.lat) * localProgress,
+        lng: from.lng + (to.lng - from.lng) * localProgress,
+      };
+    }
+
+    const stopLocationId = activePath[Math.min(presentationStopIndex, activePath.length - 1)] ?? activePath[0];
+    return stopLocationId ? (locationPositions.get(stopLocationId) ?? null) : null;
+  }, [activePath, currentPresentationSegment, locationPositions, presentationStatus, presentationStopIndex, presentationVehicleProgress]);
 
   const getPresentationImage = useCallback((location: TouristLocation | null) => {
     if (!location) return null;
@@ -324,7 +420,7 @@ export function RoutePresentationModal({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-4 px-4 py-4 md:grid-cols-[minmax(0,1.35fr)_26rem] md:px-6 md:py-6">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-hidden px-4 py-4 md:grid-cols-[minmax(0,1.35fr)_26rem] md:px-6 md:py-6">
           <div className="relative min-h-[24rem] overflow-hidden rounded-[32px] border border-white/12 bg-black/20 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
             <MapCanvas
               locations={locations}
@@ -349,6 +445,8 @@ export function RoutePresentationModal({
               showOrderedFlow={false}
               animatePathVehicle={false}
               vehicleProgressOverride={presentationStatus === 'intro' ? null : presentationVehicleProgress}
+              vehiclePositionOverride={presentationVehiclePosition}
+              vehicleRotationOverride={presentationVehicleRotation}
               hideMapControls
               defaultShowDistanceLabels={false}
               defaultShowMapBackground
@@ -411,7 +509,7 @@ export function RoutePresentationModal({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col gap-4">
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
             <div className="rounded-[30px] border border-white/12 bg-white/8 p-5 text-sm leading-7 text-white/74 shadow-[0_24px_48px_rgba(0,0,0,0.18)] backdrop-blur-md">
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">Khung tóm tắt</div>
               <div className="mt-3 space-y-2">
@@ -432,6 +530,56 @@ export function RoutePresentationModal({
                   <strong className="text-white">{MODE_LABELS[appMode]}</strong>
                 </div>
               </div>
+
+              {presentationStatus !== 'summary' && (
+                <div className="mt-5 space-y-3 rounded-[26px] border border-white/10 bg-black/16 p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">Điều khiển nhanh</div>
+                  <div className="flex flex-wrap gap-2 rounded-full border border-white/10 bg-black/18 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setPresentationMode('auto')}
+                      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${presentationMode === 'auto' ? 'bg-white text-slate-900' : 'text-white/72 hover:bg-white/10'}`}
+                    >
+                      <TimerReset className="h-4 w-4" /> Tự chạy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPresentationMode('manual')}
+                      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${presentationMode === 'manual' ? 'bg-white text-slate-900' : 'text-white/72 hover:bg-white/10'}`}
+                    >
+                      <Hand className="h-4 w-4" /> Bấm qua điểm
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    {presentationStatus === 'intro' ? (
+                      <button
+                        type="button"
+                        onClick={handleStartPresentation}
+                        className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:bg-rose-50"
+                      >
+                        <Play className="h-4 w-4" /> Bắt đầu chạy lộ trình
+                      </button>
+                    ) : presentationMode === 'manual' && presentationStatus !== 'moving' ? (
+                      <button
+                        type="button"
+                        onClick={handleAdvancePresentation}
+                        className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:bg-rose-50"
+                      >
+                        <ChevronRight className="h-4 w-4" /> {presentationStatus === 'holding' ? 'Chạy qua điểm tiếp theo' : 'Bắt đầu trình chiếu'}
+                      </button>
+                    ) : presentationStatus === 'moving' ? (
+                      <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-3 text-sm font-bold text-white/74">
+                        <RouteIcon className="h-4 w-4" /> Đang chạy qua chặng hiện tại
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-3 text-sm font-bold text-white/74">
+                        <MapPinned className="h-4 w-4" /> Xe đang dừng tại điểm hiện tại
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-[30px] border border-white/12 bg-white/8 p-5 shadow-[0_24px_48px_rgba(0,0,0,0.18)] backdrop-blur-md">
@@ -456,29 +604,6 @@ export function RoutePresentationModal({
                       <strong className="text-white">{presentationSegments.length} chặng</strong>
                     </div>
                   </div>
-                  <div className="mt-5 flex flex-wrap gap-2 rounded-full border border-white/10 bg-black/16 p-1">
-                    <button
-                      type="button"
-                      onClick={() => setPresentationMode('auto')}
-                      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${presentationMode === 'auto' ? 'bg-white text-slate-900' : 'text-white/72 hover:bg-white/10'}`}
-                    >
-                      <TimerReset className="h-4 w-4" /> Tự chạy
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPresentationMode('manual')}
-                      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${presentationMode === 'manual' ? 'bg-white text-slate-900' : 'text-white/72 hover:bg-white/10'}`}
-                    >
-                      <Hand className="h-4 w-4" /> Bấm qua điểm
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleStartPresentation}
-                    className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:bg-rose-50"
-                  >
-                    <Play className="h-4 w-4" /> Bắt đầu chạy lộ trình
-                  </button>
                 </>
               ) : presentationStatus === 'summary' ? (
                 <>
@@ -561,34 +686,6 @@ export function RoutePresentationModal({
                         </div>
                       </>
                     )}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    {presentationMode === 'manual' && presentationStatus !== 'moving' && (
-                      <button
-                        type="button"
-                        onClick={handleAdvancePresentation}
-                        className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-slate-900 transition hover:bg-rose-50"
-                      >
-                        <ChevronRight className="h-4 w-4" /> {presentationStatus === 'holding' ? 'Chạy qua điểm tiếp theo' : 'Bắt đầu trình chiếu'}
-                      </button>
-                    )}
-                    <div className="flex flex-wrap gap-2 rounded-full border border-white/10 bg-black/16 p-1">
-                      <button
-                        type="button"
-                        onClick={() => setPresentationMode('auto')}
-                        className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${presentationMode === 'auto' ? 'bg-white text-slate-900' : 'text-white/72 hover:bg-white/10'}`}
-                      >
-                        <TimerReset className="h-4 w-4" /> Tự chạy
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPresentationMode('manual')}
-                        className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${presentationMode === 'manual' ? 'bg-white text-slate-900' : 'text-white/72 hover:bg-white/10'}`}
-                      >
-                        <Hand className="h-4 w-4" /> Bấm qua điểm
-                      </button>
-                    </div>
                   </div>
                 </>
               )}

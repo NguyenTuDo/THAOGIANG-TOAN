@@ -5,7 +5,7 @@ import { MapContainer, Marker, Polyline, ScaleControl, TileLayer, Tooltip, useMa
 import { GraphCanvasProps } from './GraphCanvas';
 import { haversineKm } from '../lib/geo';
 import { getEdgeColor, getNodeColor } from '../lib/graphColors';
-import { TouristLocation } from '../types';
+import { Route, TouristLocation } from '../types';
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_NO_LABELS_URL = 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
@@ -138,6 +138,112 @@ function midpointLatLng(from: LatLngLiteral, to: LatLngLiteral): LatLngLiteral {
   };
 }
 
+function isLatLngLiteral(value: unknown): value is LatLngLiteral {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<LatLngLiteral>;
+  return typeof candidate.lat === 'number' && typeof candidate.lng === 'number';
+}
+
+function computeRotationDeg(from: LatLngLiteral, to: LatLngLiteral, mapInstance?: LeafletMap | null): number {
+  if (mapInstance) {
+    const fromPoint = mapInstance.latLngToContainerPoint(from);
+    const toPoint = mapInstance.latLngToContainerPoint(to);
+    return (Math.atan2(toPoint.y - fromPoint.y, toPoint.x - fromPoint.x) * 180) / Math.PI;
+  }
+
+  const centerLatRad = (((from.lat + to.lat) / 2) * Math.PI) / 180;
+  const dx = (to.lng - from.lng) * Math.max(Math.cos(centerLatRad), 0.3);
+  const dy = from.lat - to.lat;
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
+}
+
+function sanitizePolyline(points: LatLngLiteral[]): LatLngLiteral[] {
+  return points.filter((point, index, array) => {
+    if (index === 0) return true;
+    const previous = array[index - 1];
+    return Math.abs(previous.lat - point.lat) > 0.000001 || Math.abs(previous.lng - point.lng) > 0.000001;
+  });
+}
+
+function getRoutePolyline(
+  route: Route,
+  locationPositions: Record<string, LatLngLiteral>,
+  fromId: string,
+  toId: string,
+): LatLngLiteral[] {
+  const start = locationPositions[fromId];
+  const end = locationPositions[toId];
+  if (!start || !end) return [];
+
+  const storedWaypoints = Array.isArray(route.routePoints)
+    ? route.routePoints.filter(isLatLngLiteral)
+    : [];
+
+  const orientedPoints = route.from === fromId && route.to === toId
+    ? [start, ...storedWaypoints, end]
+    : route.from === toId && route.to === fromId
+      ? [start, ...[...storedWaypoints].reverse(), end]
+      : [start, end];
+
+  if (storedWaypoints.length > 0) {
+    return sanitizePolyline(orientedPoints);
+  }
+
+  return [start, end];
+}
+
+function getPolylineLength(points: LatLngLiteral[]): number {
+  let total = 0;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    total += haversineKm(points[index].lat, points[index].lng, points[index + 1].lat, points[index + 1].lng);
+  }
+  return total;
+}
+
+function getPointAlongPolyline(
+  points: LatLngLiteral[],
+  ratio: number,
+  mapInstance?: LeafletMap | null,
+): { position: LatLngLiteral; rotationDeg: number } | null {
+  if (points.length === 0) return null;
+  if (points.length === 1) {
+    return { position: points[0], rotationDeg: 0 };
+  }
+
+  const clampedRatio = Math.min(Math.max(ratio, 0), 1);
+  const segmentLengths = points.slice(0, -1).map((point, index) => (
+    haversineKm(point.lat, point.lng, points[index + 1].lat, points[index + 1].lng)
+  ));
+  const totalLength = segmentLengths.reduce((sum, length) => sum + length, 0) || 1;
+  const targetLength = totalLength * clampedRatio;
+
+  let traversed = 0;
+  for (let index = 0; index < segmentLengths.length; index += 1) {
+    const segmentLength = segmentLengths[index];
+    const nextTraversed = traversed + segmentLength;
+    if (targetLength <= nextTraversed || index === segmentLengths.length - 1) {
+      const localRatio = segmentLength <= 0 ? 0 : (targetLength - traversed) / segmentLength;
+      const from = points[index];
+      const to = points[index + 1];
+      return {
+        position: {
+          lat: from.lat + (to.lat - from.lat) * localRatio,
+          lng: from.lng + (to.lng - from.lng) * localRatio,
+        },
+        rotationDeg: computeRotationDeg(from, to, mapInstance),
+      };
+    }
+    traversed = nextTraversed;
+  }
+
+  const fallbackFrom = points[points.length - 2];
+  const fallbackTo = points[points.length - 1];
+  return {
+    position: fallbackTo,
+    rotationDeg: computeRotationDeg(fallbackFrom, fallbackTo, mapInstance),
+  };
+}
+
 function createNodeIcon({
   label,
   fill,
@@ -159,7 +265,10 @@ function createNodeIcon({
 }): DivIcon {
   const ringColor = isSelected ? '#1d4ed8' : isEdgeStart ? '#f59e0b' : ring;
   const ringSize = isSelected ? 3 : isEdgeStart ? 3 : ringWidth;
-  const ringShadow = ringColor ? `0 0 0 ${Math.max(ringSize, 2)}px ${ringColor}` : 'none';
+  const effectiveRingSize = mini
+    ? Math.max(Math.min(ringSize, 1.5), ringColor ? 1 : 0)
+    : Math.max(ringSize, 2);
+  const ringShadow = ringColor ? `0 0 0 ${effectiveRingSize}px ${ringColor}` : 'none';
 
   if (mini) {
     return L.divIcon({
@@ -169,8 +278,8 @@ function createNodeIcon({
           <div class="map-node map-node--mini" style="background:${fill}; box-shadow:${ringShadow};"></div>
         </div>
       `,
-      iconSize: [10, 10],
-      iconAnchor: [5, 5],
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
     });
   }
 
@@ -200,12 +309,28 @@ function createEdgeLabelIcon(
   labelRing: string,
   labelText: string,
   highContrast: boolean,
+  stateClass = '',
 ): DivIcon {
   return L.divIcon({
     className: 'map-edge-label-icon',
-    html: `<div class="map-edge-label ${isSelected ? 'is-selected' : ''} ${highContrast ? 'is-contrast' : ''}" style="--map-label-ring:${labelRing}; --map-label-text:${labelText};">${distanceKm.toFixed(1)}</div>`,
+    html: `<div class="map-edge-label ${stateClass} ${isSelected ? 'is-selected' : ''} ${highContrast ? 'is-contrast' : ''}" style="--map-label-ring:${labelRing}; --map-label-text:${labelText};">${distanceKm.toFixed(1)}</div>`,
     iconSize: [36, 20],
     iconAnchor: [18, 10],
+  });
+}
+
+function createDistanceBadgeIcon(
+  distanceKm: number | null,
+  status: 'current' | 'settled' | 'frontier' | 'unreached' | 'target',
+  directionClass: string,
+): DivIcon {
+  const displayText = distanceKm === null ? '∞' : distanceKm.toFixed(1);
+
+  return L.divIcon({
+    className: 'map-distance-badge-icon',
+    html: `<div class="map-distance-badge is-${status} ${directionClass}">${displayText}</div>`,
+    iconSize: [42, 22],
+    iconAnchor: [21, 11],
   });
 }
 
@@ -270,7 +395,7 @@ function MapViewportSync({
         return;
       }
 
-      map.invalidateSize();
+      map.invalidateSize({ pan: false, debounceMoveend: true });
 
       if (fitKey && fittedLocationKeyRef.current !== fitKey) {
         fitMapToLocations(map, locations, fitPadding, singleLocationZoom);
@@ -287,6 +412,38 @@ function MapViewportSync({
       }
     };
   }, [fitPadding, locations, map, singleLocationZoom]);
+
+  return null;
+}
+
+function MapResizeSync() {
+  const map = useMap();
+
+  useEffect(() => {
+    const container = map.getContainer();
+    if (typeof ResizeObserver === 'undefined') return;
+
+    let frameId: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        map.invalidateSize({ pan: false, debounceMoveend: true });
+        frameId = null;
+      });
+    });
+
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [map]);
 
   return null;
 }
@@ -333,6 +490,8 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   showOrderedFlow = false,
   animatePathVehicle = false,
   vehicleProgressOverride = null,
+  vehiclePositionOverride = null,
+  vehicleRotationOverride = null,
   hideMapControls = false,
   hideScaleControl = false,
   hideZoomControl = false,
@@ -369,6 +528,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   const [edgeNotice, setEdgeNotice] = useState<string | null>(null);
 
   const highlightPath = highlightedPaths[activePathIndex] ?? [];
+  const isSubsetStepMode = appMode === 'subset' && Boolean(currentStep?.distanceSnapshot?.length);
   const orderedPath = useMemo(
     () => (highlightPath.length > 1 && highlightPath[0] === highlightPath[highlightPath.length - 1]
       ? highlightPath.slice(0, -1)
@@ -408,6 +568,10 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   const locationMap = useMemo(
     () => new Map(locations.map(location => [location.id, location])),
     [locations],
+  );
+  const routeMap = useMemo(
+    () => new Map(routes.map(route => [route.id, route])),
+    [routes],
   );
 
   const locationPositions = useMemo(() => {
@@ -475,29 +639,28 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
       cumulativeEnd: number;
     }>;
 
-    const rawSegments = highlightPath.slice(0, -1).map((fromId, index) => {
+    const rawSegments = highlightPath.slice(0, -1).flatMap((fromId, index) => {
       const toId = highlightPath[index + 1];
-      const from = locationPositions[fromId] as LatLngLiteral | undefined;
-      const to = locationPositions[toId] as LatLngLiteral | undefined;
-      if (!from || !to) return null;
+      const routeId = [fromId, toId].sort().join('__');
+      const route = routeMap.get(routeId);
+      if (!route) return [];
 
-        const fromPoint = mapInstance?.latLngToContainerPoint(from);
-        const toPoint = mapInstance?.latLngToContainerPoint(to);
-        const dx = (toPoint?.x ?? to.lng) - (fromPoint?.x ?? from.lng);
-        const dy = (toPoint?.y ?? to.lat) - (fromPoint?.y ?? from.lat);
-        const rotationDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-      const length = Math.max(Math.hypot(dx, dy), 0.00001);
+      const polyline = getRoutePolyline(route, locationPositions, fromId, toId);
+      if (polyline.length < 2) return [];
 
-      return {
-        fromId,
-        toId,
-        from,
-        to,
-        midpoint: midpointLatLng(from, to),
-        rotationDeg,
-        length,
-      };
-    }).filter(Boolean) as Array<{
+      return polyline.slice(0, -1).map((from, polylineIndex) => {
+        const to = polyline[polylineIndex + 1];
+        return {
+          fromId,
+          toId,
+          from,
+          to,
+          midpoint: midpointLatLng(from, to),
+          rotationDeg: computeRotationDeg(from, to, mapInstance),
+          length: Math.max(haversineKm(from.lat, from.lng, to.lat, to.lng), 0.00001),
+        };
+      });
+    }) as Array<{
       fromId: string;
       toId: string;
       from: LatLngLiteral;
@@ -507,7 +670,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
       length: number;
     }>;
 
-    const totalLength = rawSegments.reduce((sum, segment) => sum + segment.length, 0);
+    const totalLength = rawSegments.reduce((sum, segment) => sum + segment.length, 0) || 1;
     let cumulative = 0;
     return rawSegments.map(segment => {
       const normalizedLength = segment.length / totalLength;
@@ -519,11 +682,22 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
       cumulative += normalizedLength;
       return flowSegment;
     });
-  }, [highlightPath, locationPositions, mapInstance]);
+  }, [highlightPath, locationPositions, mapInstance, routeMap]);
 
   const animatedVehicle = useMemo(() => {
-    const motionEnabled = animatePathVehicle || vehicleProgressOverride !== null;
+    const motionEnabled = animatePathVehicle || vehicleProgressOverride !== null || vehiclePositionOverride !== null;
     if (!motionEnabled || flowSegments.length === 0) return null;
+
+    if (vehiclePositionOverride) {
+      const effectiveProgress = vehicleProgressOverride ?? vehicleProgress;
+      const activeSegment = flowSegments.find(segment => effectiveProgress <= segment.cumulativeEnd) ?? flowSegments[flowSegments.length - 1];
+
+      return {
+        position: vehiclePositionOverride,
+        rotationDeg: vehicleRotationOverride ?? activeSegment.rotationDeg,
+      };
+    }
+
     const effectiveProgress = vehicleProgressOverride ?? vehicleProgress;
     const activeSegment = flowSegments.find(segment => effectiveProgress <= segment.cumulativeEnd) ?? flowSegments[flowSegments.length - 1];
     const segmentSpan = Math.max(activeSegment.cumulativeEnd - activeSegment.cumulativeStart, 0.00001);
@@ -543,7 +717,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
         : basePosition,
       rotationDeg: activeSegment.rotationDeg,
     };
-  }, [animatePathVehicle, flowSegments, vehicleProgress, vehicleProgressOverride]);
+  }, [animatePathVehicle, flowSegments, vehiclePositionOverride, vehicleProgress, vehicleProgressOverride, vehicleRotationOverride]);
 
   const handleRouteClick = useCallback((routeId: string) => {
     onEdgeStartSet(null);
@@ -558,7 +732,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   }, [edgeNotice]);
 
   useEffect(() => {
-    if (vehicleProgressOverride !== null) {
+    if (vehicleProgressOverride !== null || vehiclePositionOverride !== null) {
       return;
     }
 
@@ -572,7 +746,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
     }, 80);
 
     return () => window.clearInterval(timerId);
-  }, [animatePathVehicle, flowSegments, vehicleProgressOverride]);
+  }, [animatePathVehicle, flowSegments, vehiclePositionOverride, vehicleProgressOverride]);
 
   const openPendingRoute = useCallback((fromId: string, toId: string) => {
     const fromLocation = locationMap.get(fromId);
@@ -664,6 +838,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
           fitPadding={fitPadding}
           singleLocationZoom={singleLocationZoom}
         />
+        <MapResizeSync />
         <MapInteractionSync onMapReady={setMapInstance} onBackgroundClick={() => {
           onSelectElement(null);
           onEdgeStartSet(null);
@@ -678,42 +853,67 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
 
           const fromPosition = locationPositions[from.id] as LatLngLiteral;
           const toPosition = locationPositions[to.id] as LatLngLiteral;
-          const midpoint = midpointLatLng(fromPosition, toPosition);
+          const routePolyline = getRoutePolyline(route, locationPositions, route.from, route.to);
+          if (routePolyline.length < 2) return null;
+
+          const midpoint = getPointAlongPolyline(routePolyline, 0.5, mapInstance)?.position ?? midpointLatLng(fromPosition, toPosition);
           const isSelected = selectedElement?.type === 'route' && selectedElement.id === route.id;
           const { stroke, width, dashed } = getEdgeColor(route, currentStep, highlightPath);
+          const edgeEvaluation = currentStep?.edgeEvaluations?.find(item => (
+            (item.fromId === route.from && item.toId === route.to) ||
+            (item.fromId === route.to && item.toId === route.from)
+          ));
+          const edgeLabelStateClass = edgeEvaluation
+            ? edgeEvaluation.accepted
+              ? 'is-accepted'
+              : 'is-rejected'
+            : '';
+
+          const shouldShowEdgeDistanceLabel = showDistanceLabels && (
+            appMode === 'subset' ||
+            !isSubsetStepMode ||
+            Boolean(edgeEvaluation) ||
+            isSelected
+          );
 
           return (
             <React.Fragment key={route.id}>
               <Polyline
-                positions={[fromPosition, toPosition]}
+                positions={routePolyline}
                 pathOptions={{
-                  color: effectiveShowMapBackground ? 'rgba(255,255,255,0.92)' : modeAccent.edgeHalo,
-                  weight: effectiveShowMapBackground ? (isSelected ? 7 : width + 3) : (isSelected ? 8 : width + 4),
+                  color: edgeEvaluation
+                    ? (edgeEvaluation.accepted ? 'rgba(219,234,254,0.98)' : 'rgba(255,247,ed,0.98)')
+                    : (effectiveShowMapBackground ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.94)'),
+                  weight: edgeEvaluation
+                    ? (edgeEvaluation.accepted ? 14 : 12)
+                    : (effectiveShowMapBackground ? (isSelected ? 8 : width + 4) : (isSelected ? 9 : width + 5)),
                   lineCap: 'round',
                   dashArray: dashed ? '8 4' : undefined,
                 }}
                 interactive={false}
               />
               <Polyline
-                positions={[fromPosition, toPosition]}
+                positions={routePolyline}
                 pathOptions={{ color: '#000000', opacity: 0.001, weight: 18 }}
                 eventHandlers={{ click: () => handleRouteClick(route.id) }}
               />
               <Polyline
-                positions={[fromPosition, toPosition]}
+                positions={routePolyline}
                 pathOptions={{
-                  color: isSelected ? '#f59e0b' : (effectiveShowMapBackground ? stroke : highlightedAccent.edgeStroke),
-                  weight: effectiveShowMapBackground ? (isSelected ? 5 : width) : (isSelected ? 5.5 : width + 0.7),
+                  color: isSelected ? '#f59e0b' : stroke,
+                  weight: edgeEvaluation
+                    ? width
+                    : (effectiveShowMapBackground ? (isSelected ? 5 : width) : (isSelected ? 5.5 : width + 0.7)),
                   dashArray: dashed ? '8 4' : undefined,
                   lineCap: 'round',
-                  opacity: isSelected ? 1 : 0.95,
+                  opacity: edgeEvaluation ? 1 : (isSelected ? 1 : 0.95),
                 }}
                 eventHandlers={{ click: () => handleRouteClick(route.id) }}
               />
-              {showDistanceLabels && (
+              {shouldShowEdgeDistanceLabel && (
                 <Marker
                   position={midpoint}
-                  icon={createEdgeLabelIcon(route.distanceKm, isSelected, highlightedAccent.labelRing, highlightedAccent.labelText, !effectiveShowMapBackground)}
+                  icon={createEdgeLabelIcon(route.distanceKm, isSelected, highlightedAccent.labelRing, highlightedAccent.labelText, !effectiveShowMapBackground, edgeLabelStateClass)}
                   interactive={false}
                   keyboard={false}
                   zIndexOffset={100}
@@ -751,6 +951,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
 
         {locations.map(location => {
           const position = locationPositions[location.id] as LatLngLiteral;
+          const locationIndex = locations.findIndex(item => item.id === location.id);
           const { fill, ring, ringWidth } = getNodeColor(
             location,
             currentStep,
@@ -762,55 +963,71 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
           );
           const isCurrent = currentStep?.currentNodeId === location.id;
           const isSelected = selectedElement?.type === 'location' && selectedElement.id === location.id;
+          const badgeDirectionClass = locationIndex % 2 === 0 ? 'dir-top-left' : 'dir-top-right';
 
           return (
-            <Marker
-              key={location.id}
-              position={position}
-              icon={createNodeIcon({
-                label: location.label,
-                fill,
-                ring,
-                ringWidth,
-                isSelected,
-                isCurrent,
-                isEdgeStart: uiMode === 'edit' && edgeStart === location.id,
-                mini: miniNodeIcons,
-              })}
-              draggable={uiMode === 'edit'}
-              autoPan={false}
-              zIndexOffset={isSelected ? 600 : isCurrent ? 500 : 400}
-              eventHandlers={{
-                click: () => {
-                  if (suppressClickLocationIdRef.current === location.id) {
-                    suppressClickLocationIdRef.current = null;
-                    return;
-                  }
-                  handleLocationSelect(location.id);
-                },
-                dragstart: () => {
-                  mapInstance?.dragging.disable();
-                },
-                dragend: event => {
-                  mapInstance?.dragging.enable();
-                  suppressClickLocationIdRef.current = location.id;
-                  updateDraggedLocation(location, event.target.getLatLng());
-                },
-              }}
-            >
-              <Tooltip direction="top" offset={[0, -18]} className="map-node-tooltip">
-                <div className="space-y-1.5">
-                  <div className="text-sm font-bold text-slate-900">{location.fullName}</div>
-                  <div className="text-[11px] font-semibold text-slate-500">{location.category}</div>
-                  <div className="max-w-[220px] text-xs leading-5 text-slate-600">
-                    {location.shortIntro ?? location.description}
+            <React.Fragment key={location.id}>
+              <Marker
+                position={position}
+                icon={createNodeIcon({
+                  label: location.label,
+                  fill,
+                  ring,
+                  ringWidth,
+                  isSelected,
+                  isCurrent,
+                  isEdgeStart: uiMode === 'edit' && edgeStart === location.id,
+                  mini: miniNodeIcons,
+                })}
+                draggable={uiMode === 'edit'}
+                autoPan={false}
+                zIndexOffset={isSelected ? 600 : isCurrent ? 500 : 400}
+                eventHandlers={{
+                  click: () => {
+                    if (suppressClickLocationIdRef.current === location.id) {
+                      suppressClickLocationIdRef.current = null;
+                      return;
+                    }
+                    handleLocationSelect(location.id);
+                  },
+                  dragstart: () => {
+                    mapInstance?.dragging.disable();
+                  },
+                  dragend: event => {
+                    mapInstance?.dragging.enable();
+                    suppressClickLocationIdRef.current = location.id;
+                    updateDraggedLocation(location, event.target.getLatLng());
+                  },
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -18]} className="map-node-tooltip">
+                  <div className="space-y-1.5">
+                    <div className="text-sm font-bold text-slate-900">{location.fullName}</div>
+                    <div className="text-[11px] font-semibold text-slate-500">{location.category}</div>
+                    <div className="max-w-[220px] text-xs leading-5 text-slate-600">
+                      {location.shortIntro ?? location.description}
+                    </div>
+                    {location.visitDuration && (
+                      <div className="text-[11px] text-slate-400">Gợi ý thời lượng: {location.visitDuration}</div>
+                    )}
                   </div>
-                  {location.visitDuration && (
-                    <div className="text-[11px] text-slate-400">Gợi ý thời lượng: {location.visitDuration}</div>
-                  )}
-                </div>
-              </Tooltip>
-            </Marker>
+                </Tooltip>
+              </Marker>
+
+              {currentStep?.distanceSnapshot?.find(item => item.nodeId === location.id) && !miniNodeIcons && (() => {
+                const snapshot = currentStep.distanceSnapshot?.find(item => item.nodeId === location.id);
+                if (!snapshot) return null;
+                return (
+                  <Marker
+                    position={position}
+                    icon={createDistanceBadgeIcon(snapshot.distanceKm, snapshot.status, badgeDirectionClass)}
+                    interactive={false}
+                    keyboard={false}
+                    zIndexOffset={720}
+                  />
+                );
+              })()}
+            </React.Fragment>
           );
         })}
 

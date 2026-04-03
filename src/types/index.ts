@@ -41,6 +41,7 @@ export interface Route {
   from: string;
   to: string;
   distanceKm: number;
+  routePoints?: Array<{ lat: number; lng: number }>;
 }
 
 export interface GraphData {
@@ -90,7 +91,26 @@ export interface RolePermissions {
 
 // ─── Algorithm types ──────────────────────────────────────────────────────────
 
-export type StepType = 'visit' | 'backtrack' | 'found' | 'no_solution';
+export type StepType = 'visit' | 'backtrack' | 'found' | 'no_solution' | 'inspect' | 'update';
+
+export type SubsetNodeStatus = 'current' | 'settled' | 'frontier' | 'unreached' | 'target';
+
+export interface SubsetDistanceSnapshot {
+  nodeId: string;
+  distanceKm: number | null;
+  previousNodeId: string | null;
+  status: SubsetNodeStatus;
+}
+
+export interface SubsetEdgeEvaluation {
+  fromId: string;
+  toId: string;
+  edgeDistanceKm: number;
+  candidateDistanceKm: number;
+  previousBestKm: number | null;
+  accepted: boolean;
+  reason: string;
+}
 
 export interface AlgorithmStep {
   type: StepType;
@@ -99,11 +119,15 @@ export interface AlgorithmStep {
   totalWeight: number;    // tổng km tích lũy
   explanation: string;    // giải thích tiếng Việt
   isBacktracking: boolean;
+  phaseLabel?: string;
+  distanceSnapshot?: SubsetDistanceSnapshot[];
+  edgeEvaluations?: SubsetEdgeEvaluation[];
 }
 
 export interface AlgorithmResult {
   found: boolean;
   allCycles: { path: string[]; weight: number }[]; // Bài 1: toàn bộ chu trình tìm được (đã khử nghịch đảo), sắp xếp theo weight
+  allPaths: { path: string[]; weight: number }[]; // Bài 2: toàn bộ đường đi Hamilton hợp lệ, sắp xếp theo weight
   shortestCycles: string[][];  // Bài 1: chu trình ngắn nhất (cùng trọng số) — shortestCycles[0] là đại diện
   shortestPath: string[];      // Bài 2 & 3: đường đi ngắn nhất tìm được
   totalDistanceKm: number;

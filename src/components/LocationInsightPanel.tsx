@@ -30,12 +30,12 @@ const CATEGORY_GRADIENT: Record<string, string> = {
   'Khách sạn': 'from-[#47311b] via-[#9e7a47] to-[#ead9b0]',
 };
 
-export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
+export const LocationInsightPanel = React.memo(({
   selectedElement,
   locations,
   routes,
   appMode,
-}) => {
+}: LocationInsightPanelProps) => {
   const { lang, t } = useLang();
   const [imageIndex, setImageIndex] = useState(0);
 
@@ -257,4 +257,6 @@ export const LocationInsightPanel: React.FC<LocationInsightPanelProps> = ({
       )}
     </div>
   );
-};
+});
+
+LocationInsightPanel.displayName = 'LocationInsightPanel';

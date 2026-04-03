@@ -39,7 +39,8 @@ create table if not exists routes (
   id           text    primary key,
   "from"       text    not null,
   "to"         text    not null,
-  "distanceKm" float8  not null
+  "distanceKm" float8  not null,
+  "routePoints" jsonb
 );
 
 create table if not exists preset_selections (
@@ -69,6 +70,7 @@ alter table locations add column if not exists lat              float8;
 alter table locations add column if not exists lng              float8;
 alter table preset_selections add column if not exists "startId" text;
 alter table preset_selections add column if not exists "endId"   text;
+alter table routes add column if not exists "routePoints" jsonb;
 
 -- ------------------------------------------------------------
 -- 3. ROW LEVEL SECURITY

@@ -40,6 +40,8 @@ export interface GraphCanvasProps {
   showOrderedFlow?: boolean;
   animatePathVehicle?: boolean;
   vehicleProgressOverride?: number | null;
+  vehiclePositionOverride?: { lat: number; lng: number } | null;
+  vehicleRotationOverride?: number | null;
   hideMapControls?: boolean;
   hideScaleControl?: boolean;
   hideZoomControl?: boolean;
