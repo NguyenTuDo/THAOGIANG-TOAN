@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { Expand, ExternalLink, GripVertical, PencilLine, Plus, Trash2, X } from 'lucide-react';
 import { AppMode, GraphData, PresetSelection, PresetSelectionMap, Route, SelectedElement, TouristLocation } from '../types';
 import { MapCanvas } from './MapCanvas';
+import { LocationCard } from './LocationCard';
+import { LocationDetailModal } from './LocationDetailModal';
 import { projectGeoLocationsToCanvas, syncLocationsToProjectedCanvas } from '../lib/geoProjection';
 
 interface AdminDashboardProps {
@@ -107,6 +109,7 @@ export function AdminDashboard({
   const [savingPositions, setSavingPositions] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [locationPreviewOpen, setLocationPreviewOpen] = useState(false);
   const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [edgeStart, setEdgeStart] = useState<string | null>(null);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
@@ -197,6 +200,33 @@ export function AdminDashboard({
     return graphData.routes.find(route => route.id === selectedElement.id) ?? null;
   }, [graphData.routes, selectedElement]);
   const orderedLocations = useMemo(() => graphData.locations, [graphData.locations]);
+  const locationPreviewDraft = useMemo<TouristLocation>(() => {
+    const trimmedId = locationForm.id.trim().toUpperCase() || 'NEW';
+    const fullName = locationForm.fullName.trim() || 'Tên địa danh sẽ hiện ở đây';
+    const description = locationForm.description.trim() || 'Mô tả chi tiết sẽ hiện trong modal để thầy thấy khách sẽ đọc gì sau khi bấm vào card.';
+
+    return {
+      ...EMPTY_LOCATION,
+      ...locationForm,
+      id: trimmedId,
+      label: (locationForm.label || trimmedId).trim() || trimmedId,
+      fullName,
+      fullNameEn: locationForm.fullNameEn?.trim() || fullName,
+      shortIntro: locationForm.shortIntro?.trim() || description,
+      shortIntroEn: locationForm.shortIntroEn?.trim() || locationForm.shortIntro?.trim() || description,
+      description,
+      descriptionEn: locationForm.descriptionEn?.trim() || description,
+      neighborhood: locationForm.neighborhood?.trim() || 'Khu vực sẽ hiện ở đây',
+      neighborhoodEn: locationForm.neighborhoodEn?.trim() || locationForm.neighborhood?.trim() || 'Area badge',
+      bestFor: locationForm.bestFor?.trim() || 'Nhóm khách phù hợp',
+      bestForEn: locationForm.bestForEn?.trim() || locationForm.bestFor?.trim() || 'Best-fit audience',
+      visitDuration: locationForm.visitDuration?.trim() || '20-30 phút',
+      googleMapsUrl: locationForm.googleMapsUrl?.trim() || 'https://maps.google.com',
+      images: (locationForm.images ?? []).map(url => url.trim()).filter(Boolean),
+      highlights: highlightsDraft.split(',').map(item => item.trim()).filter(Boolean),
+      highlightsEn: highlightsEnDraft.split(',').map(item => item.trim()).filter(Boolean),
+    };
+  }, [highlightsDraft, highlightsEnDraft, locationForm]);
 
   // Canvas locations = Supabase data + in-flight drag overrides + auto-spread if all at default
   const canvasLocations = useMemo(() => {
@@ -470,6 +500,7 @@ export function AdminDashboard({
     setLocationForm(EMPTY_LOCATION);
     setHighlightsDraft('');
     setHighlightsEnDraft('');
+    setLocationPreviewOpen(false);
     setLocationModalOpen(true);
   };
 
@@ -492,6 +523,7 @@ export function AdminDashboard({
     });
     setHighlightsDraft((location.highlights ?? []).join(', '));
     setHighlightsEnDraft((location.highlightsEn ?? []).join(', '));
+    setLocationPreviewOpen(false);
     setLocationModalOpen(true);
   };
 
@@ -1166,139 +1198,159 @@ export function AdminDashboard({
       {locationModalOpen && (
         <ModalShell title={locationForm.id ? `Sửa địa điểm ${locationForm.id}` : 'Thêm địa điểm mới'} onClose={() => setLocationModalOpen(false)}>
           <form onSubmit={handleLocationSubmit} className="space-y-5">
-            <div>
-              <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                Thông tin địa danh
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Mã địa điểm">
-                <input value={locationForm.id} placeholder="Ví dụ: DS" onChange={event => setLocationForm(current => ({ ...current, id: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Nhãn node">
-                <input value={locationForm.label} placeholder="Ví dụ: Nhà\\nThờ" onChange={event => setLocationForm(current => ({ ...current, label: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Tên đầy đủ (VI)">
-                <input value={locationForm.fullName} placeholder="Ví dụ: Nhà Thờ Đức Bà" onChange={event => setLocationForm(current => ({ ...current, fullName: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Tên đầy đủ (EN)">
-                <input value={locationForm.fullNameEn ?? ''} placeholder="Example: Notre-Dame Cathedral" onChange={event => setLocationForm(current => ({ ...current, fullNameEn: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Danh mục">
-                <select value={locationForm.category} onChange={event => setLocationForm(current => ({ ...current, category: event.target.value as TouristLocation['category'] }))} className="field-input">
-                  {CATEGORY_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </Field>
-              <Field label="Google Maps">
-                <input value={locationForm.googleMapsUrl ?? ''} placeholder="https://maps.app.goo.gl/..." onChange={event => setLocationForm(current => ({ ...current, googleMapsUrl: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Khu vực (VI)">
-                <input value={locationForm.neighborhood ?? ''} placeholder="Ví dụ: Công xã Paris, Quận 1" onChange={event => setLocationForm(current => ({ ...current, neighborhood: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Khu vực (EN)">
-                <input value={locationForm.neighborhoodEn ?? ''} placeholder="Example: Paris Commune Square, District 1" onChange={event => setLocationForm(current => ({ ...current, neighborhoodEn: event.target.value }))} className="field-input" />
-              </Field>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-              Các trường nên nhập: <strong>mã</strong>, <strong>tên</strong>, <strong>danh mục</strong>, <strong>mô tả ngắn</strong>,
-              <strong> hình ảnh</strong>, <strong>Google Maps</strong> và <strong>điểm nhấn</strong>. Tọa độ sẽ được đặt ở bảng trực quan
-              rồi lưu xuống Supabase sau. Có thể bỏ qua bản tiếng Anh nếu chưa cần.
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Multi-image carousel */}
-              <div className="md:col-span-2 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Ảnh địa điểm (carousel — ảnh đầu tiên là ảnh chính)</div>
-                {(locationForm.images ?? []).map((url, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={url}
-                        placeholder={`Ảnh ${i + 1}: https://...`}
-                        onChange={e => setLocationForm(curr => {
-                          const imgs = [...(curr.images ?? [])];
-                          imgs[i] = e.target.value;
-                          return { ...curr, images: imgs };
-                        })}
-                        className="field-input flex-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setLocationForm(curr => ({ ...curr, images: (curr.images ?? []).filter((_, j) => j !== i) }))}
-                        className="shrink-0 rounded-full px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50"
-                      >
-                        Xóa
-                      </button>
-                    </div>
-                    {url && (
-                      <img src={url} alt={`preview-${i}`} className="max-h-40 w-full rounded-xl object-cover border border-slate-200" />
-                    )}
+            <div className="grid gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
+              <div className="space-y-4 xl:sticky xl:top-0 self-start">
+                <div className="rounded-[28px] border border-[#ded5c7] bg-[#f8f3eb] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Xem mở rộng</div>
+                  <div className="mt-2 text-sm leading-6 text-slate-600">
+                    Cột trái là preview đúng giao diện trang chính. Bấm vào card hoặc nút bên dưới để mở thử modal chi tiết ngay trong lúc nhập.
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setLocationForm(curr => ({ ...curr, images: [...(curr.images ?? []), ''] }))}
-                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  + Thêm ảnh
-                </button>
+                </div>
+
+                <div className="rounded-[28px] border border-[#ded5c7] bg-[#f8f3eb] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Card location</div>
+                  <div className="mt-4">
+                    <LocationCard
+                      location={locationPreviewDraft}
+                      selectionIndex={null}
+                      isStart={false}
+                      isEnd={false}
+                      isDisabled={false}
+                      onOpen={() => setLocationPreviewOpen(true)}
+                      onToggle={() => {}}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLocationPreviewOpen(true)}
+                    className="mt-4 w-full rounded-full bg-slate-900 px-4 py-3 text-sm font-bold text-white"
+                  >
+                    Mở thử modal chi tiết
+                  </button>
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Mapping dữ liệu</div>
+                  <div className="mt-3 space-y-2 text-sm text-slate-700">
+                    <div><strong>Tên đầy đủ</strong>: tiêu đề lớn trên card và modal.</div>
+                    <div><strong>Mô tả ngắn</strong>: phần tóm tắt trên card.</div>
+                    <div><strong>Mô tả đầy đủ</strong>: nội dung chính trong modal chi tiết.</div>
+                    <div><strong>Điểm nhấn</strong>: các badge ngắn gọn.</div>
+                    <div><strong>Google Maps</strong>: nút mở bản đồ.</div>
+                    <div><strong>Ảnh</strong>: ảnh card và bộ ảnh trong modal.</div>
+                  </div>
+                </div>
               </div>
-              {/* Lat/Lng */}
-              <Field label="Vĩ độ (lat)">
-                <input
-                  type="number"
-                  step="any"
-                  value={locationForm.lat ?? ''}
-                  placeholder="Ví dụ: 10.7769"
-                  onChange={e => setLocationForm(curr => ({ ...curr, lat: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                  className="field-input"
-                />
-              </Field>
-              <Field label="Kinh độ (lng)">
-                <input
-                  type="number"
-                  step="any"
-                  value={locationForm.lng ?? ''}
-                  placeholder="Ví dụ: 106.6951"
-                  onChange={e => setLocationForm(curr => ({ ...curr, lng: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                  className="field-input"
-                />
-              </Field>
-              <Field label="Mô tả ngắn (VI)" full>
-                <textarea value={locationForm.shortIntro ?? ''} placeholder="Ví dụ: Điểm mang tính biểu tượng, hợp cho khách lần đầu đến trung tâm thành phố." onChange={event => setLocationForm(current => ({ ...current, shortIntro: event.target.value }))} rows={2} className="field-input min-h-[92px]" />
-              </Field>
-              <Field label="Mô tả ngắn (EN)" full>
-                <textarea value={locationForm.shortIntroEn ?? ''} placeholder="Example: An iconic stop that works well for first-time visitors." onChange={event => setLocationForm(current => ({ ...current, shortIntroEn: event.target.value }))} rows={2} className="field-input min-h-[92px]" />
-              </Field>
-              <Field label="Mô tả đầy đủ (VI)" full>
-                <textarea value={locationForm.description} placeholder="Ví dụ: Điểm ghé nổi bật để chụp ảnh, ngắm kiến trúc và nối tiếp hành trình quanh trường." onChange={event => setLocationForm(current => ({ ...current, description: event.target.value }))} rows={3} className="field-input min-h-[110px]" />
-              </Field>
-              <Field label="Mô tả đầy đủ (EN)" full>
-                <textarea value={locationForm.descriptionEn ?? ''} placeholder="Example: A standout stop for photos, architecture and continuing the school-area journey." onChange={event => setLocationForm(current => ({ ...current, descriptionEn: event.target.value }))} rows={3} className="field-input min-h-[110px]" />
-              </Field>
-              <Field label="Phù hợp cho (VI)">
-                <input value={locationForm.bestFor ?? ''} placeholder="Ví dụ: Chụp ảnh, kiến trúc, khách lần đầu đến Sài Gòn" onChange={event => setLocationForm(current => ({ ...current, bestFor: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Phù hợp cho (EN)">
-                <input value={locationForm.bestForEn ?? ''} placeholder="Example: Photography, architecture, first-time Saigon visitors" onChange={event => setLocationForm(current => ({ ...current, bestForEn: event.target.value }))} className="field-input" />
-              </Field>
-              <Field label="Điểm nhấn (VI, cách nhau bằng dấu phẩy)" full>
-                <input
-                  value={highlightsDraft}
-                  placeholder="Ví dụ: Mặt tiền biểu tượng, Cụm du lịch trung tâm, Dễ nối sang Bưu điện"
-                  onChange={event => setHighlightsDraft(event.target.value)}
-                  className="field-input"
-                />
-              </Field>
-              <Field label="Điểm nhấn (EN, cách nhau bằng dấu phẩy)" full>
-                <input
-                  value={highlightsEnDraft}
-                  placeholder="Example: Iconic facade, Central tourist cluster, Easy connection to Post Office"
-                  onChange={event => setHighlightsEnDraft(event.target.value)}
-                  className="field-input"
-                />
-              </Field>
+
+              <div className="space-y-5">
+                <div>
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                    Thông tin địa danh
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Mã địa điểm" hint="Dùng cho quản trị và preset.">
+                      <input value={locationForm.id} placeholder="Ví dụ: DS" onChange={event => setLocationForm(current => ({ ...current, id: event.target.value }))} className="field-input" />
+                    </Field>
+                    <Field label="Nhãn node" hint="Badge ngắn trên card ảnh.">
+                      <input value={locationForm.label} placeholder="Ví dụ: Nhà\\nThờ" onChange={event => setLocationForm(current => ({ ...current, label: event.target.value }))} className="field-input" />
+                    </Field>
+                    <Field label="Tên đầy đủ (VI)" hint="Tiêu đề lớn trên card và modal.">
+                      <input value={locationForm.fullName} placeholder="Ví dụ: Nhà Thờ Đức Bà" onChange={event => setLocationForm(current => ({ ...current, fullName: event.target.value }))} className="field-input" />
+                    </Field>
+                    <Field label="Tên đầy đủ (EN)" hint="Bản tiếng Anh của tiêu đề lớn.">
+                      <input value={locationForm.fullNameEn ?? ''} placeholder="Example: Notre-Dame Cathedral" onChange={event => setLocationForm(current => ({ ...current, fullNameEn: event.target.value }))} className="field-input" />
+                    </Field>
+                    <Field label="Danh mục" hint="Ảnh hưởng màu và phong cách card.">
+                      <select value={locationForm.category} onChange={event => setLocationForm(current => ({ ...current, category: event.target.value as TouristLocation['category'] }))} className="field-input">
+                        {CATEGORY_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Google Maps" hint="Nút Maps trên trang chính và trong modal.">
+                      <input value={locationForm.googleMapsUrl ?? ''} placeholder="https://maps.app.goo.gl/..." onChange={event => setLocationForm(current => ({ ...current, googleMapsUrl: event.target.value }))} className="field-input" />
+                    </Field>
+                    <Field label="Khu vực (VI)" hint="Badge khu vực ở card và dòng vị trí trong modal.">
+                      <input value={locationForm.neighborhood ?? ''} placeholder="Ví dụ: Công xã Paris, Quận 1" onChange={event => setLocationForm(current => ({ ...current, neighborhood: event.target.value }))} className="field-input" />
+                    </Field>
+                    <Field label="Khu vực (EN)" hint="Bản tiếng Anh của badge khu vực.">
+                      <input value={locationForm.neighborhoodEn ?? ''} placeholder="Example: Paris Commune Square, District 1" onChange={event => setLocationForm(current => ({ ...current, neighborhoodEn: event.target.value }))} className="field-input" />
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+                  Cột phải là phần chỉnh sửa. Cột trái là phần xem trước đúng giao diện thật, nên thầy có thể vừa nhập vừa kiểm tra ngay card và modal trên trang chính sẽ trông như thế nào.
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="md:col-span-2 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Ảnh địa điểm (carousel — ảnh đầu tiên là ảnh chính)</div>
+                    {(locationForm.images ?? []).map((url, i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={url}
+                            placeholder={`Ảnh ${i + 1}: https://...`}
+                            onChange={e => setLocationForm(curr => {
+                              const imgs = [...(curr.images ?? [])];
+                              imgs[i] = e.target.value;
+                              return { ...curr, images: imgs };
+                            })}
+                            className="field-input flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setLocationForm(curr => ({ ...curr, images: (curr.images ?? []).filter((_, j) => j !== i) }))}
+                            className="shrink-0 rounded-full px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                        {url && (
+                          <img src={url} alt={`preview-${i}`} className="max-h-40 w-full rounded-xl border border-slate-200 object-cover" />
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setLocationForm(curr => ({ ...curr, images: [...(curr.images ?? []), ''] }))}
+                      className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      + Thêm ảnh
+                    </button>
+                  </div>
+
+                  <Field label="Vĩ độ (lat)">
+                    <input type="number" step="any" value={locationForm.lat ?? ''} placeholder="Ví dụ: 10.7769" onChange={e => setLocationForm(curr => ({ ...curr, lat: e.target.value ? parseFloat(e.target.value) : undefined }))} className="field-input" />
+                  </Field>
+                  <Field label="Kinh độ (lng)">
+                    <input type="number" step="any" value={locationForm.lng ?? ''} placeholder="Ví dụ: 106.6951" onChange={e => setLocationForm(curr => ({ ...curr, lng: e.target.value ? parseFloat(e.target.value) : undefined }))} className="field-input" />
+                  </Field>
+                  <Field label="Mô tả ngắn (VI)" hint="Dòng mô tả ngắn trên card trang chính." full>
+                    <textarea value={locationForm.shortIntro ?? ''} placeholder="Ví dụ: Điểm mang tính biểu tượng, hợp cho khách lần đầu đến trung tâm thành phố." onChange={event => setLocationForm(current => ({ ...current, shortIntro: event.target.value }))} rows={2} className="field-input min-h-[92px]" />
+                  </Field>
+                  <Field label="Mô tả ngắn (EN)" hint="Bản tiếng Anh của mô tả ngắn trên card." full>
+                    <textarea value={locationForm.shortIntroEn ?? ''} placeholder="Example: An iconic stop that works well for first-time visitors." onChange={event => setLocationForm(current => ({ ...current, shortIntroEn: event.target.value }))} rows={2} className="field-input min-h-[92px]" />
+                  </Field>
+                  <Field label="Mô tả đầy đủ (VI)" hint="Nội dung chính trong modal khi bấm card." full>
+                    <textarea value={locationForm.description} placeholder="Ví dụ: Điểm ghé nổi bật để chụp ảnh, ngắm kiến trúc và nối tiếp hành trình quanh trường." onChange={event => setLocationForm(current => ({ ...current, description: event.target.value }))} rows={3} className="field-input min-h-[110px]" />
+                  </Field>
+                  <Field label="Mô tả đầy đủ (EN)" hint="Bản tiếng Anh của nội dung modal." full>
+                    <textarea value={locationForm.descriptionEn ?? ''} placeholder="Example: A standout stop for photos, architecture and continuing the school-area journey." onChange={event => setLocationForm(current => ({ ...current, descriptionEn: event.target.value }))} rows={3} className="field-input min-h-[110px]" />
+                  </Field>
+                  <Field label="Phù hợp cho (VI)" hint="Dùng trong modal chi tiết.">
+                    <input value={locationForm.bestFor ?? ''} placeholder="Ví dụ: Chụp ảnh, kiến trúc, khách lần đầu đến Sài Gòn" onChange={event => setLocationForm(current => ({ ...current, bestFor: event.target.value }))} className="field-input" />
+                  </Field>
+                  <Field label="Phù hợp cho (EN)" hint="Bản tiếng Anh dùng trong modal.">
+                    <input value={locationForm.bestForEn ?? ''} placeholder="Example: Photography, architecture, first-time Saigon visitors" onChange={event => setLocationForm(current => ({ ...current, bestForEn: event.target.value }))} className="field-input" />
+                  </Field>
+                  <Field label="Điểm nhấn (VI, cách nhau bằng dấu phẩy)" hint="Tạo badge ngắn trên card và modal." full>
+                    <input value={highlightsDraft} placeholder="Ví dụ: Mặt tiền biểu tượng, Cụm du lịch trung tâm, Dễ nối sang Bưu điện" onChange={event => setHighlightsDraft(event.target.value)} className="field-input" />
+                  </Field>
+                  <Field label="Điểm nhấn (EN, cách nhau bằng dấu phẩy)" hint="Bản tiếng Anh của nhóm badge." full>
+                    <input value={highlightsEnDraft} placeholder="Example: Iconic facade, Central tourist cluster, Easy connection to Post Office" onChange={event => setHighlightsEnDraft(event.target.value)} className="field-input" />
+                  </Field>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3">
@@ -1310,6 +1362,16 @@ export function AdminDashboard({
               </button>
             </div>
           </form>
+          <LocationDetailModal
+            location={locationPreviewDraft}
+            isOpen={locationPreviewOpen}
+            isSelected={false}
+            isStart={false}
+            isEnd={false}
+            isDisabled={false}
+            onClose={() => setLocationPreviewOpen(false)}
+            onToggle={() => {}}
+          />
         </ModalShell>
       )}
 
@@ -1500,7 +1562,7 @@ function ModalShell({
 
   return createPortal(
     <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/20 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.3)]">
+      <div className="max-h-[92vh] w-full max-w-7xl overflow-hidden rounded-[32px] border border-white/20 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.3)]">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div className="text-xl font-black text-slate-900">{title}</div>
           <button type="button" onClick={onClose} className="rounded-full border border-slate-200 p-2 text-slate-600">
@@ -1518,16 +1580,19 @@ function ModalShell({
 
 function Field({
   label,
+  hint,
   children,
   full = false,
 }: {
   label: string;
+  hint?: string;
   children: React.ReactNode;
   full?: boolean;
 }) {
   return (
     <label className={`block ${full ? 'md:col-span-2' : ''}`}>
       <div className="mb-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</div>
+      {hint && <div className="mb-2 text-xs leading-5 text-slate-500">{hint}</div>}
       {children}
     </label>
   );
@@ -1711,4 +1776,3 @@ function AdminRouteQuickPanel({
     </div>
   );
 }
-

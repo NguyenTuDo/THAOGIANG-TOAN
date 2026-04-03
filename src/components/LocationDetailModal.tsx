@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, MapPinned, Navigation, Sparkles, X } from 'lucide-react';
 import { TouristLocation } from '../types';
 import { CATEGORY_EN, useLang } from '../contexts/LanguageContext';
@@ -75,8 +76,8 @@ export const LocationDetailModal: React.FC<LocationDetailModalProps> = ({
       ? `${Math.round(distanceKm * 1000)} m`
       : `${distanceKm.toFixed(1)} km`;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-sm md:items-center md:p-6" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-[10040] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm md:items-center md:p-6" onClick={onClose}>
       <div
         className="max-h-[94vh] w-full overflow-hidden rounded-t-[30px] bg-[#f8f3eb] shadow-[0_30px_100px_rgba(15,23,42,0.35)] md:max-w-5xl md:rounded-[32px]"
         onClick={event => event.stopPropagation()}
@@ -255,6 +256,7 @@ export const LocationDetailModal: React.FC<LocationDetailModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
