@@ -48,9 +48,11 @@ export interface GraphCanvasProps {
   hideAttributionControl?: boolean;
   disableMapInteraction?: boolean;
   miniNodeIcons?: boolean;
+  compactNodeLabels?: boolean;
   fitPadding?: number;
   singleLocationZoom?: number;
   defaultShowDistanceLabels?: boolean;
+  subtleWeightLabels?: boolean;
   defaultShowMapBackground?: boolean;
   defaultTileTheme?: 'light' | 'voyager' | 'street' | 'dark';
   allowedTileThemes?: Array<'light' | 'voyager' | 'street' | 'dark'>;

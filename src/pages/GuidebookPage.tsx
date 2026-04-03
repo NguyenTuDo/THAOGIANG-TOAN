@@ -9,7 +9,7 @@ import { loadGraphData, loadPresets, readLocalDraft, TOURIST_DATA_CHANGED_EVENT,
 import { useLang } from '../contexts/LanguageContext';
 import { AppMode, AlgorithmResult, GraphData, PresetSelectionMap } from '../types';
 
-const MODES: { id: AppMode; label: string; labelEn: string; desc: string; descEn: string; activeClass: string }[] = [
+const MODES: { id: AppMode; label: string; labelEn: string; desc: string; descEn: string; activeClass: string; softClass: string; badgeClass: string }[] = [
   {
     id: 'cycle',
     label: 'Bài 1',
@@ -17,6 +17,8 @@ const MODES: { id: AppMode; label: string; labelEn: string; desc: string; descEn
     desc: 'Chu trình Hamilton',
     descEn: 'Hamiltonian cycle',
     activeClass: 'bg-[#133654] text-white',
+    softClass: 'bg-[#e8eff6] text-[#133654]',
+    badgeClass: 'bg-[#d6e3f2] text-[#133654]',
   },
   {
     id: 'path',
@@ -25,6 +27,8 @@ const MODES: { id: AppMode; label: string; labelEn: string; desc: string; descEn
     desc: 'Đường đi Hamilton',
     descEn: 'Hamiltonian path',
     activeClass: 'bg-[#6b2745] text-white',
+    softClass: 'bg-[#f7e8ef] text-[#6b2745]',
+    badgeClass: 'bg-[#f0d8e3] text-[#6b2745]',
   },
   {
     id: 'subset',
@@ -33,6 +37,8 @@ const MODES: { id: AppMode; label: string; labelEn: string; desc: string; descEn
     desc: 'Đường đi ngắn nhất trong tập chọn',
     descEn: 'Shortest path in chosen subset',
     activeClass: 'bg-[#82501f] text-white',
+    softClass: 'bg-[#f7efe6] text-[#82501f]',
+    badgeClass: 'bg-[#eddcc7] text-[#82501f]',
   },
 ];
 
@@ -253,69 +259,97 @@ export function GuidebookPage() {
     () => graphData.routes.filter(r => selectedIds.includes(r.from) && selectedIds.includes(r.to)),
     [graphData.routes, selectedIds],
   );
+  const currentStageLabel = appView === 'selector'
+    ? t('Bước 1 - Chọn bài toán và điểm dừng', 'Step 1 - Choose the mode and stops')
+    : appView === 'preview'
+      ? t('Bước 2 - Kiểm tra đồ thị trước khi giải', 'Step 2 - Review the graph before solving')
+      : t('Bước 3 - Theo dõi lời giải trên bản đồ', 'Step 3 - Follow the final route on the map');
 
   return (
-    <div className="min-h-screen bg-[#efe7da] text-slate-900">
-      <header className="sticky top-0 z-20 border-b border-[#d7ccbb] bg-[#f7f1e7]/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-4 px-4 py-4 md:px-6">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.72),transparent_28%),linear-gradient(180deg,#f5efe4_0%,#efe7da_52%,#ece3d5_100%)] text-slate-900">
+      <header className="sticky top-0 z-20 border-b border-[#d7ccbb]/80 bg-[#f7f1e7]/88 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1520px] px-3 py-3 md:px-6 md:py-4">
+          <div className="rounded-[30px] border border-white/70 bg-white/72 px-4 py-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] md:px-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+              <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#14342b] text-white shadow-[0_10px_24px_rgba(20,52,43,0.25)]">
               <MapPinned className="h-5 w-5" />
             </div>
-            <div className="leading-tight">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-                {t('Cẩm nang du lịch', 'Tourist guidebook')}
-              </div>
-              <div className="text-lg font-black text-slate-900">
-                {t('Tham quan quanh THPT Marie Curie', 'Around Marie Curie High School')}
+              <div className="min-w-0 leading-tight">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+                  {t('Cẩm nang du lịch', 'Tourist guidebook')}
+                </div>
+                <div className="text-lg font-black text-slate-900 md:text-[1.8rem]">
+                  {t('Tham quan quanh THPT Marie Curie', 'Around Marie Curie High School')}
+                </div>
+                <div className="mt-2 inline-flex max-w-full rounded-full border border-[#e6dccd] bg-[#f7f1e7] px-3 py-1.5 text-[11px] font-semibold text-slate-600 md:text-xs">
+                  {currentStageLabel}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="mx-auto flex gap-1 rounded-full border border-[#ddd1c0] bg-white/80 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-            {MODES.map(mode => (
-              <button
-                key={mode.id}
-                onClick={() => setAppMode(mode.id)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${
-                  appMode === mode.id ? `${mode.activeClass} shadow-sm` : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-                title={lang === 'en' ? mode.descEn : mode.desc}
-              >
-                <span>{lang === 'en' ? mode.labelEn : mode.label}</span>
-                <span className="ml-2 hidden text-xs opacity-80 md:inline">{lang === 'en' ? mode.descEn : mode.desc}</span>
-              </button>
-            ))}
-          </div>
+              <div className="flex items-center justify-between gap-3 md:justify-end">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#ddd1c0] bg-white px-2 py-2 text-xs font-semibold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+                  <Languages className="h-4 w-4" />
+                  <button
+                    onClick={() => setLang('vi')}
+                    className={`rounded-full px-3 py-1 ${lang === 'vi' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}
+                  >
+                    VI
+                  </button>
+                  <button
+                    onClick={() => setLang('en')}
+                    className={`rounded-full px-3 py-1 ${lang === 'en' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}
+                  >
+                    EN
+                  </button>
+                </div>
+              </div>
+            </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#ddd1c0] bg-white px-2 py-2 text-xs font-semibold text-slate-700">
-              <Languages className="h-4 w-4" />
-              <button
-                onClick={() => setLang('vi')}
-                className={`rounded-full px-3 py-1 ${lang === 'vi' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}
-              >
-                VI
-              </button>
-              <button
-                onClick={() => setLang('en')}
-                className={`rounded-full px-3 py-1 ${lang === 'en' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}
-              >
-                EN
-              </button>
+            <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
+              {MODES.map(mode => {
+                const isActive = appMode === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    onClick={() => setAppMode(mode.id)}
+                    className={`rounded-[24px] border px-4 py-3 text-left transition-all md:px-5 md:py-4 ${
+                      isActive
+                        ? `${mode.activeClass} border-transparent shadow-[0_18px_36px_rgba(15,23,42,0.12)]`
+                        : 'border-[#e6dccd] bg-[#fbf8f2] text-slate-700 hover:border-slate-300 hover:bg-white'
+                    }`}
+                    title={lang === 'en' ? mode.descEn : mode.desc}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-black md:text-base">{lang === 'en' ? mode.labelEn : mode.label}</div>
+                        <div className={`mt-1 text-[11px] leading-snug md:text-xs ${isActive ? 'text-white/80' : 'text-slate-400'}`}>
+                          {lang === 'en' ? mode.descEn : mode.desc}
+                        </div>
+                      </div>
+                      <div className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                        isActive ? 'bg-white/14 text-white' : mode.badgeClass
+                      }`}>
+                        {mode.label}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-6">
+      <main className="mx-auto max-w-[1520px] px-3 py-4 md:px-6 md:py-6">
         {loadingData ? (
-          <div className="rounded-[28px] border border-[#ded5c7] bg-white/90 p-6 text-sm text-slate-600">
+          <div className="rounded-[30px] border border-[#ded5c7] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_20px_45px_rgba(15,23,42,0.06)]">
             {t('Đang tải dữ liệu cẩm nang...', 'Loading guidebook data...')}
           </div>
         ) : (
           <div className="space-y-4">
-            <section className="overflow-hidden rounded-[34px] border border-[#ded5c7] bg-white/70 shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
+            <section className="overflow-hidden rounded-[34px] border border-white/60 bg-white/78 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
               {appView === 'selector' ? (
                 <DestinationSelector
                   locations={graphData.locations}

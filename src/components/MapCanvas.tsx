@@ -253,6 +253,7 @@ function createNodeIcon({
   isCurrent,
   isEdgeStart,
   mini,
+  compact,
 }: {
   label: string;
   fill: string;
@@ -262,6 +263,7 @@ function createNodeIcon({
   isCurrent: boolean;
   isEdgeStart: boolean;
   mini: boolean;
+  compact: boolean;
 }): DivIcon {
   const ringColor = isSelected ? '#1d4ed8' : isEdgeStart ? '#f59e0b' : ring;
   const ringSize = isSelected ? 3 : isEdgeStart ? 3 : ringWidth;
@@ -288,6 +290,27 @@ function createNodeIcon({
     .map(line => `<span class="map-node__line">${escapeHtml(line)}</span>`)
     .join('');
 
+  if (compact) {
+    const compactLabelHtml = lines
+      .slice(0, 2)
+      .map(line => `<span style="display:block; line-height:1.05;">${escapeHtml(line)}</span>`)
+      .join('');
+
+    return L.divIcon({
+      className: 'map-node-icon map-node-icon--compact',
+      html: `
+        <div class="map-node-shell map-node-shell--compact ${isCurrent ? 'is-current' : ''} ${isSelected ? 'is-selected' : ''}" style="display:flex; flex-direction:column; align-items:center;">
+          <div class="map-node" style="background:${fill}; box-shadow:${ringShadow}; width:34px; height:34px; border-radius:9999px;"></div>
+          <div style="margin-top:5px; min-width:44px; max-width:78px; border:1px solid rgba(255,255,255,0.82); border-radius:9999px; background:rgba(255,255,255,0.92); padding:4px 7px; text-align:center; font-size:11px; font-weight:800; color:#1e293b; letter-spacing:-0.01em; box-shadow:0 8px 18px rgba(15,23,42,0.10); text-shadow:0 1px 0 rgba(255,255,255,0.45);">
+            ${compactLabelHtml}
+          </div>
+        </div>
+      `,
+      iconSize: [82, 56],
+      iconAnchor: [41, 17],
+    });
+  }
+
   return L.divIcon({
     className: 'map-node-icon',
     html: `
@@ -310,12 +333,13 @@ function createEdgeLabelIcon(
   labelText: string,
   highContrast: boolean,
   stateClass = '',
+  subtle = false,
 ): DivIcon {
   return L.divIcon({
     className: 'map-edge-label-icon',
-    html: `<div class="map-edge-label ${stateClass} ${isSelected ? 'is-selected' : ''} ${highContrast ? 'is-contrast' : ''}" style="--map-label-ring:${labelRing}; --map-label-text:${labelText};">${distanceKm.toFixed(1)}</div>`,
-    iconSize: [36, 20],
-    iconAnchor: [18, 10],
+    html: `<div class="map-edge-label ${stateClass} ${isSelected ? 'is-selected' : ''} ${highContrast ? 'is-contrast' : ''}" style="--map-label-ring:${labelRing}; --map-label-text:${labelText}; ${subtle ? 'opacity:0.82; transform:scale(0.88); box-shadow:0 6px 14px rgba(15,23,42,0.08);' : ''}">${distanceKm.toFixed(1)}</div>`,
+    iconSize: subtle ? [32, 18] : [36, 20],
+    iconAnchor: subtle ? [16, 9] : [18, 10],
   });
 }
 
@@ -323,14 +347,15 @@ function createDistanceBadgeIcon(
   distanceKm: number | null,
   status: 'current' | 'settled' | 'frontier' | 'unreached' | 'target',
   directionClass: string,
+  subtle = false,
 ): DivIcon {
   const displayText = distanceKm === null ? '∞' : distanceKm.toFixed(1);
 
   return L.divIcon({
     className: 'map-distance-badge-icon',
-    html: `<div class="map-distance-badge is-${status} ${directionClass}">${displayText}</div>`,
-    iconSize: [42, 22],
-    iconAnchor: [21, 11],
+    html: `<div class="map-distance-badge is-${status} ${directionClass}" style="${subtle ? 'opacity:0.84; transform:scale(0.88); box-shadow:0 6px 14px rgba(15,23,42,0.08);' : ''}">${displayText}</div>`,
+    iconSize: subtle ? [36, 20] : [42, 22],
+    iconAnchor: subtle ? [18, 10] : [21, 11],
   });
 }
 
@@ -498,9 +523,11 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   hideAttributionControl = false,
   disableMapInteraction = false,
   miniNodeIcons = false,
+  compactNodeLabels = false,
   fitPadding = 40,
   singleLocationZoom = 17,
   defaultShowDistanceLabels = true,
+  subtleWeightLabels = false,
   defaultShowMapBackground = false,
   defaultTileTheme = 'light',
   allowedTileThemes = ['light', 'voyager', 'street', 'dark'],
@@ -913,7 +940,15 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               {shouldShowEdgeDistanceLabel && (
                 <Marker
                   position={midpoint}
-                  icon={createEdgeLabelIcon(route.distanceKm, isSelected, highlightedAccent.labelRing, highlightedAccent.labelText, !effectiveShowMapBackground, edgeLabelStateClass)}
+                  icon={createEdgeLabelIcon(
+                    route.distanceKm,
+                    isSelected,
+                    highlightedAccent.labelRing,
+                    highlightedAccent.labelText,
+                    !effectiveShowMapBackground,
+                    edgeLabelStateClass,
+                    subtleWeightLabels,
+                  )}
                   interactive={false}
                   keyboard={false}
                   zIndexOffset={100}
@@ -978,6 +1013,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
                   isCurrent,
                   isEdgeStart: uiMode === 'edit' && edgeStart === location.id,
                   mini: miniNodeIcons,
+                  compact: compactNodeLabels,
                 })}
                 draggable={uiMode === 'edit'}
                 autoPan={false}
@@ -1020,7 +1056,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
                 return (
                   <Marker
                     position={position}
-                    icon={createDistanceBadgeIcon(snapshot.distanceKm, snapshot.status, badgeDirectionClass)}
+                    icon={createDistanceBadgeIcon(snapshot.distanceKm, snapshot.status, badgeDirectionClass, subtleWeightLabels)}
                     interactive={false}
                     keyboard={false}
                     zIndexOffset={720}

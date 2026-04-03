@@ -1,5 +1,6 @@
 import React from 'react';
 import { TouristLocation, Route, AlgorithmResult, AlgorithmStep, AppMode } from '../types';
+import { MapCanvas } from './MapCanvas';
 import { PathDisplay } from './PathDisplay';
 
 interface SolutionPanelProps {
@@ -9,6 +10,7 @@ interface SolutionPanelProps {
   locations: TouristLocation[];
   routes: Route[];
   detailMode: 'result' | 'method';
+  showResolvedPathHeader?: boolean;
 }
 
 const STEP_COLORS = {
@@ -57,11 +59,78 @@ const SUBSET_STATUS_META = {
   },
 };
 
+function MiniVariantMap({
+  path,
+  locations,
+  routes,
+  appMode,
+}: {
+  path: string[];
+  locations: TouristLocation[];
+  routes: Route[];
+  appMode: AppMode;
+}) {
+  const variantRoutes = routes.filter(route => {
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const fromId = path[index];
+      const toId = path[index + 1];
+      if (
+        (route.from === fromId && route.to === toId) ||
+        (route.from === toId && route.to === fromId)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+
+  const uniqueLocationIds = Array.from(new Set(path));
+  const variantLocations = locations.filter(location => uniqueLocationIds.includes(location.id));
+  return (
+    <div className="pointer-events-none h-[154px] w-full overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50">
+      <MapCanvas
+        locations={variantLocations}
+        routes={variantRoutes}
+        appMode={appMode}
+        uiMode="view"
+        startId=""
+        endId={null}
+        selectedSubset={variantLocations.map(location => location.id)}
+        currentStep={null}
+        highlightedPaths={[]}
+        activePathIndex={0}
+        selectedElement={null}
+        onLocationClick={() => {}}
+        onLocationDrag={() => {}}
+        onCanvasDoubleClick={() => {}}
+        onRouteClick={() => {}}
+        onSelectElement={() => {}}
+        edgeStart={null}
+        onEdgeStartSet={() => {}}
+        onAddRoute={() => {}}
+        hideMapControls
+        hideScaleControl
+        hideZoomControl
+        hideAttributionControl
+        disableMapInteraction
+        miniNodeIcons
+        fitPadding={12}
+        singleLocationZoom={18}
+        defaultShowDistanceLabels={false}
+        defaultShowMapBackground
+        defaultTileTheme="light"
+        allowedTileThemes={['light']}
+      />
+    </div>
+  );
+}
+
 export const SolutionPanel: React.FC<SolutionPanelProps> = ({
-  result, currentStepIdx, appMode, locations, routes, detailMode,
+  result, currentStepIdx, appMode, locations, routes, detailMode, showResolvedPathHeader = true,
 }) => {
   const currentStep: AlgorithmStep | undefined = result?.steps[currentStepIdx];
-  const shouldShowResolvedPathHeader = detailMode === 'result' || appMode !== 'subset';
+  const shouldShowResolvedPathHeader = showResolvedPathHeader && (detailMode === 'result' || appMode !== 'subset');
 
   const getSegmentDist = (fromId: string, toId: string): number | null => {
     const r = routes.find(
@@ -93,6 +162,8 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
       ? result.shortestCycles[0] ?? []
       : result.shortestPath;
   const bestWeight = result.totalDistanceKm;
+  const variants = appMode === 'cycle' ? result.allCycles : appMode === 'path' ? result.allPaths : [];
+  const secondaryVariants = variants.filter(variant => Math.abs(variant.weight - bestWeight) >= 0.001);
   const subsetPriorityQueue = appMode === 'subset' && currentStep?.distanceSnapshot
     ? [...currentStep.distanceSnapshot]
       .filter(snapshot => snapshot.distanceKm !== null && snapshot.status !== 'settled' && snapshot.status !== 'current')
@@ -326,6 +397,42 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {secondaryVariants.length > 0 && (
+              <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {appMode === 'cycle' ? 'Mini map các chu trình phụ' : 'Mini map các phương án phụ'}
+                  </div>
+                  <div className="text-[10px] text-slate-400">{secondaryVariants.length} phương án</div>
+                </div>
+                <div className="overflow-x-auto no-scrollbar px-3 py-3">
+                  <div className="flex gap-4">
+                    {secondaryVariants.map((variant, index) => (
+                      <div
+                        key={`${variant.path.join('>')}-${index}`}
+                        className="w-[320px] shrink-0 rounded-[24px] border border-slate-100 bg-slate-50/80 p-3"
+                      >
+                        <MiniVariantMap
+                          path={variant.path}
+                          locations={locations}
+                          routes={routes}
+                          appMode={appMode}
+                        />
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500">
+                            TH {index + 2}
+                          </span>
+                          <span className="text-base font-black text-slate-900">
+                            {variant.weight.toFixed(1)} km
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : (

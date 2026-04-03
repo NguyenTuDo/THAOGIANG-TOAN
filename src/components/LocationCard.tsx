@@ -167,13 +167,10 @@ export const LocationCard: React.FC<LocationCardProps> = ({
 
   return (
     <div
-      role="button"
-      tabIndex={isDisabled ? -1 : 0}
       onClick={isDisabled ? undefined : onClick}
-      onKeyDown={isDisabled ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`group relative w-full overflow-hidden rounded-[28px] border border-white/50 text-left transition-all duration-300 ${
+      className={`group relative w-full overflow-hidden rounded-[24px] border border-white/50 text-left transition-all duration-300 md:rounded-[28px] ${
         isDisabled ? 'scale-[0.98] cursor-not-allowed opacity-40' : 'cursor-pointer hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(15,23,42,0.16)]'
       } ${
         isSelected
@@ -184,7 +181,7 @@ export const LocationCard: React.FC<LocationCardProps> = ({
       }`}
     >
       <div
-        className={`relative aspect-[0.92] overflow-hidden bg-gradient-to-br ${theme.gradient}`}
+        className={`relative aspect-[1.12] overflow-hidden bg-gradient-to-br md:aspect-[0.92] ${theme.gradient}`}
       >
         <div
           ref={imgScrollRef}
@@ -222,22 +219,24 @@ export const LocationCard: React.FC<LocationCardProps> = ({
         {/* Image carousel controls */}
         {hasMultiple && (
           <>
-            <div
-              role="button"
-              tabIndex={0}
+            <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i - 1 + allImages.length) % allImages.length); }}
+              aria-label={t('Ảnh trước', 'Previous image')}
+              title={t('Ảnh trước', 'Previous image')}
               className="absolute left-2 top-1/2 -translate-y-1/2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
             >
               <ChevronLeft className="h-4 w-4" />
-            </div>
-            <div
-              role="button"
-              tabIndex={0}
+            </button>
+            <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i + 1) % allImages.length); }}
+              aria-label={t('Ảnh tiếp theo', 'Next image')}
+              title={t('Ảnh tiếp theo', 'Next image')}
               className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
             >
               <ChevronRight className="h-4 w-4" />
-            </div>
+            </button>
             {/* Dots */}
             <div className="absolute bottom-16 left-1/2 flex -translate-x-1/2 gap-1">
               {allImages.map((_, i) => (
@@ -254,7 +253,7 @@ export const LocationCard: React.FC<LocationCardProps> = ({
           <div className={`mb-2 text-[11px] font-medium uppercase tracking-[0.28em] ${theme.accent}`}>
             {displayCategory}
           </div>
-          <div className="max-w-[11rem] text-[1.7rem] font-black leading-[0.95] tracking-tight text-white">
+          <div className="max-w-[11rem] text-[1.45rem] font-black leading-[0.95] tracking-tight text-white md:text-[1.7rem]">
             {displayName}
           </div>
           <div className="mt-3 flex items-center gap-2 text-[11px] text-white/84">

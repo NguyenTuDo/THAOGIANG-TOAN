@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, BookOpen, ChevronDown, Clapperboard, Clock3, Info, ListTree, Map as MapIcon, Play, RotateCcw, ShieldCheck, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Clapperboard, Clock3, Info, ListTree, Maximize2, Minimize2, Play, RotateCcw, ShieldCheck, Volume2, VolumeX, X } from 'lucide-react';
 import { TouristLocation, Route, AppMode, AlgorithmResult, SelectedElement } from '../types';
 import { MapCanvas } from './MapCanvas';
 import { LocationInsightPanel } from './LocationInsightPanel';
@@ -34,7 +34,52 @@ interface GraphViewProps {
 }
 
 type DesktopResultTab = 'summary' | 'method';
-type MobileStageTab = 'map' | 'preview' | 'summary' | 'method';
+type MobileStageTab = 'preview' | 'summary' | 'method';
+
+function ResultViewSwitch({
+  activeTab,
+  onChange,
+  methodLabel,
+  showMethodTab = true,
+}: {
+  activeTab: 'summary' | 'method';
+  onChange: (tab: 'summary' | 'method') => void;
+  methodLabel: string;
+  showMethodTab?: boolean;
+}) {
+  if (!showMethodTab) {
+    return (
+      <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-1 text-xs font-bold">
+        <div className="rounded-[16px] bg-slate-900 px-3 py-2.5 text-center text-white shadow-[0_10px_20px_rgba(15,23,42,0.16)]">
+          Lời giải
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-[20px] border border-slate-200 bg-slate-50 p-1 text-xs font-bold">
+      <button
+        type="button"
+        onClick={() => onChange('summary')}
+        className={`rounded-[16px] px-3 py-2.5 text-center transition-colors ${
+          activeTab === 'summary' ? 'bg-slate-900 text-white shadow-[0_10px_20px_rgba(15,23,42,0.16)]' : 'text-slate-500'
+        }`}
+      >
+        Lời giải
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('method')}
+        className={`rounded-[16px] px-3 py-2.5 text-center transition-colors ${
+          activeTab === 'method' ? 'bg-slate-900 text-white shadow-[0_10px_20px_rgba(15,23,42,0.16)]' : 'text-slate-500'
+        }`}
+      >
+        {methodLabel}
+      </button>
+    </div>
+  );
+}
 
 function buildRouteKey(fromId: string, toId: string) {
   return [fromId, toId].sort().join('__');
@@ -43,84 +88,6 @@ function buildRouteKey(fromId: string, toId: string) {
 function arePathsEqual(left: string[], right: string[]) {
   if (left.length !== right.length) return false;
   return left.every((value, index) => value === right[index]);
-}
-
-function MiniCycleMap({
-  locations,
-  routes,
-  appMode,
-  startId,
-  endId,
-  path,
-}: {
-  locations: TouristLocation[];
-  routes: Route[];
-  appMode: AppMode;
-  startId: string;
-  endId: string | null;
-  path: string[];
-}) {
-  const miniRoutes = useMemo(() => routes.filter(route => {
-    for (let index = 0; index < path.length - 1; index += 1) {
-      const fromId = path[index];
-      const toId = path[index + 1];
-      if (
-        (route.from === fromId && route.to === toId) ||
-        (route.from === toId && route.to === fromId)
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  }), [path, routes]);
-
-  const pathLocationIds = useMemo(
-    () => Array.from(new Set(path)),
-    [path],
-  );
-  const miniLocations = useMemo(
-    () => locations.filter(location => pathLocationIds.includes(location.id)),
-    [locations, pathLocationIds],
-  );
-
-  return (
-    <div className="pointer-events-none h-[154px] w-full overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50">
-      <MapCanvas
-        locations={miniLocations}
-        routes={miniRoutes}
-        appMode={appMode}
-        uiMode="view"
-        startId={startId}
-        endId={endId}
-        selectedSubset={miniLocations.map(location => location.id)}
-        currentStep={null}
-        highlightedPaths={[path]}
-        activePathIndex={0}
-        selectedElement={null}
-        onLocationClick={() => {}}
-        onLocationDrag={() => {}}
-        onCanvasDoubleClick={() => {}}
-        onRouteClick={() => {}}
-        onSelectElement={() => {}}
-        edgeStart={null}
-        onEdgeStartSet={() => {}}
-        onAddRoute={() => {}}
-        hideMapControls
-        hideScaleControl
-        hideZoomControl
-        hideAttributionControl
-        disableMapInteraction
-        miniNodeIcons
-        fitPadding={12}
-        singleLocationZoom={18}
-        defaultShowDistanceLabels={false}
-        defaultShowMapBackground={true}
-        defaultTileTheme="light"
-        allowedTileThemes={['light']}
-      />
-    </div>
-  );
 }
 
 function evaluatePreviewPath(
@@ -224,10 +191,10 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [isPresentationOpen, setIsPresentationOpen] = useState(false);
   const [activePreviewCaseId, setActivePreviewCaseId] = useState<string>('selection-order');
-  const [showRemainingCycles, setShowRemainingCycles] = useState(false);
   const [desktopResultTab, setDesktopResultTab] = useState<DesktopResultTab>('summary');
-  const [mobileStageTab, setMobileStageTab] = useState<MobileStageTab>('map');
+  const [mobileStageTab, setMobileStageTab] = useState<MobileStageTab>('preview');
   const [isMobileInsightOpen, setIsMobileInsightOpen] = useState(false);
+  const [isMobileMapExpanded, setIsMobileMapExpanded] = useState(false);
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [isPlayingSteps, setIsPlayingSteps] = useState(false);
   const [playSpeedMs, setPlaySpeedMs] = useState(1000);
@@ -456,25 +423,12 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const previewIntro = appMode === 'subset'
     ? 'Bước xem trước này cho phép quan sát tập điểm đang chọn, các cạnh sẵn có và thử nhanh một vài phương án nối hai đầu mút.'
     : 'Bước xem trước này cho phép kiểm tra các điểm, các cạnh và thử nhanh vài lộ trình trước khi chốt lời giải tối ưu.';
-  const remainingCycles = useMemo(() => {
-    if (stage !== 'result' || appMode !== 'cycle' || !result) return [];
-    return result.allCycles.filter(cycle => !arePathsEqual(cycle.path, activePath));
-  }, [activePath, appMode, result, stage]);
-  const remainingPaths = useMemo(() => {
-    if (stage !== 'result' || appMode !== 'path' || !result) return [];
-    return result.allPaths.filter(path => !arePathsEqual(path.path, activePath));
-  }, [activePath, appMode, result, stage]);
-  const remainingVariants = appMode === 'cycle' ? remainingCycles : appMode === 'path' ? remainingPaths : [];
   const totalSteps = result?.steps.length ?? 0;
   const methodTabLabel = appMode === 'subset' ? 'Cách giải' : 'Liệt kê phương án';
+  const hasSeparateMethodTab = appMode === 'subset';
   const isDesktopSubsetMethod = stage === 'result' && appMode === 'subset' && desktopResultTab === 'method';
   const isMobileSubsetMethod = stage === 'result' && appMode === 'subset' && mobileStageTab === 'method';
   const visibleCurrentStep = isDesktopSubsetMethod || isMobileSubsetMethod ? subsetCurrentStep : null;
-  const remainingTitle = appMode === 'cycle' ? 'Các chu trình còn lại' : 'Các đường đi còn lại';
-  const remainingDescription = appMode === 'cycle'
-    ? 'Tách riêng xuống dưới để lướt ngang các trường hợp phụ.'
-    : 'Tách riêng xuống dưới để lướt ngang các phương án đường đi phụ.';
-  const remainingCountLabel = appMode === 'cycle' ? 'chu trình' : 'đường đi';
 
   useEffect(() => {
     if (selectedElement) {
@@ -483,17 +437,12 @@ export const GraphView: React.FC<GraphViewProps> = ({
   }, [selectedElement]);
 
   useEffect(() => {
-    if (stage !== 'result' || (appMode !== 'cycle' && appMode !== 'path')) {
-      setShowRemainingCycles(false);
-    }
-  }, [appMode, stage]);
-
-  useEffect(() => {
     setDesktopResultTab('summary');
     setIsPlayingSteps(false);
     setIsNarrationEnabled(false);
     setCurrentStepIdx(0);
     setMobileStageTab(stage === 'result' ? 'summary' : 'preview');
+    setIsMobileMapExpanded(false);
   }, [result, stage]);
 
   useEffect(() => {
@@ -634,20 +583,33 @@ export const GraphView: React.FC<GraphViewProps> = ({
     />
   ) : null;
 
+  const desktopResultSummaryPanel = result ? (
+    <SolutionPanel
+      result={result}
+      currentStepIdx={currentStepIdx}
+      appMode={appMode}
+      locations={locations}
+      routes={routes}
+      detailMode="result"
+      showResolvedPathHeader={false}
+    />
+  ) : null;
+
   const resultMethodPanel = result ? (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
       {appMode === 'subset' && (
         <div className="border-b border-slate-100 bg-white px-4 py-3">
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
-            <div className="flex items-center gap-2.5">
-              <div className="rounded-xl bg-indigo-100 p-2 text-indigo-600">
-                <Clock3 className="h-4 w-4" />
+          <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-indigo-100 p-2 text-indigo-600">
+                  <Clock3 className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Cách giải</div>
+                  <div className="text-sm font-bold text-slate-800">Mô phỏng Dijkstra</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Cách giải</div>
-                <div className="text-sm font-bold text-slate-800">Mô phỏng Dijkstra</div>
-              </div>
-            </div>
 
               <button
                 type="button"
@@ -659,6 +621,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
                 {isNarrationEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
                 {isNarrationEnabled ? 'Đọc' : 'Tắt'}
               </button>
+            </div>
+
           </div>
         </div>
       )}
@@ -671,7 +635,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         routes={routes}
         detailMode="method"
       />
-      {appMode === 'subset' && !isDesktopSubsetMethod && (
+      {appMode === 'subset' && !isDesktopSubsetMethod && !isMobileSubsetMethod && (
         <StepNavigator
           totalSteps={totalSteps}
           currentIdx={currentStepIdx}
@@ -687,36 +651,79 @@ export const GraphView: React.FC<GraphViewProps> = ({
     </div>
   ) : null;
 
+  const desktopResultPanel = stage === 'result' && result ? (
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-[26px] border border-white/75 bg-white/95 shadow-[0_20px_40px_rgba(15,23,42,0.16)] backdrop-blur">
+      <div className="border-b border-slate-100 px-4 py-3">
+        <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Kết quả tích hợp trên bản đồ</div>
+        <div className="mt-3">
+          <ResultViewSwitch
+            activeTab={desktopResultTab}
+            onChange={setDesktopResultTab}
+            methodLabel={methodTabLabel}
+            showMethodTab={hasSeparateMethodTab}
+          />
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {hasSeparateMethodTab
+          ? (desktopResultTab === 'method' ? resultMethodPanel : desktopResultSummaryPanel)
+          : resultMethodPanel}
+      </div>
+    </div>
+  ) : null;
+
+  const mobileResultOverlay = stage === 'result' && result ? (
+    <div className="overflow-hidden rounded-[28px] border border-[#e5ddd0] bg-white shadow-[0_16px_34px_rgba(15,23,42,0.08)]">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <ResultViewSwitch
+            activeTab={mobileStageTab === 'method' ? 'method' : 'summary'}
+            onChange={tab => setMobileStageTab(tab)}
+            methodLabel={methodTabLabel}
+            showMethodTab={hasSeparateMethodTab}
+          />
+        </div>
+      </div>
+
+      <div className="overflow-y-auto">
+        {hasSeparateMethodTab
+          ? (mobileStageTab === 'method' ? resultMethodPanel : resultSummaryPanel)
+          : resultMethodPanel}
+      </div>
+    </div>
+  ) : null;
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col overflow-hidden bg-[linear-gradient(180deg,#fbf8f3_0%,#f5efe5_100%)] md:min-h-[44rem]">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 shrink-0 flex-wrap">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[#e5ddd0] bg-white/88 px-4 py-3 backdrop-blur">
         <button onClick={onBack}
-          className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-800 transition-colors">
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800">
           <ArrowLeft className="w-4 h-4" />
           {stage === 'result' ? 'Quay lại xem trước' : 'Quay lại chỉnh điểm'}
         </button>
-        <div className={`text-xs font-bold text-white px-2.5 py-1 rounded-full ${MODE_LABEL[appMode].color}`}>
+        <div className={`rounded-full px-2.5 py-1 text-xs font-bold text-white ${MODE_LABEL[appMode].color}`}>
           {MODE_LABEL[appMode].label}
         </div>
-        <div className={`text-xs font-bold px-2.5 py-1 rounded-full ${stage === 'result' ? 'bg-slate-900 text-white' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>
+        <div className={`rounded-full px-2.5 py-1 text-xs font-bold ${stage === 'result' ? 'bg-slate-900 text-white' : 'border border-sky-200 bg-sky-50 text-sky-700'}`}>
           {stage === 'result' ? 'Bước 3 — Kết quả cuối' : 'Bước 2 — Xem trước đồ thị'}
         </div>
 
         {/* ⭐ Ràng buộc cốt lõi — badge nổi bật */}
-        <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full">
+        <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
           <ShieldCheck className="w-3.5 h-3.5" />
           {appMode === 'subset' ? 'Không cần đi qua tất cả điểm' : 'Mỗi điểm chỉ đi qua 1 lần'}
         </div>
 
-        <div className="text-xs text-slate-500 ml-auto">
+        <div className="ml-auto rounded-full bg-[#f7f1e7] px-3 py-1 text-xs text-slate-500">
           {locations.length} điểm · {stage === 'result' ? `${displayRoutes.length} chặng thuộc kết quả` : `${routes.length} cạnh đang hiển thị`}
         </div>
 
         {stage === 'preview' && (
           <button
             onClick={onSolve}
-            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors"
+            className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
           >
             <Play className="w-3.5 h-3.5" /> Giải bài toán
           </button>
@@ -724,7 +731,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
         <button
           onClick={() => setIsPresentationOpen(true)}
-          className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
           title="Mở trình chiếu lộ trình"
         >
           <Clapperboard className="w-3.5 h-3.5" /> Trình chiếu
@@ -732,13 +739,13 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
         {stage === 'result' ? (
           <button onClick={onRerun}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-600">
+            className="flex items-center gap-1 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-emerald-600">
             <RotateCcw className="w-3.5 h-3.5" /> Giải lại
           </button>
         ) : (
           <button
             onClick={() => setActivePreviewCaseId(previewCases[0]?.id ?? 'selection-order')}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-600"
+            className="flex items-center gap-1 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-emerald-600"
           >
             <RotateCcw className="w-3.5 h-3.5" /> Làm mới xem trước
           </button>
@@ -763,60 +770,224 @@ export const GraphView: React.FC<GraphViewProps> = ({
       {/* Main content */}
       <div className="md:hidden flex-1 overflow-y-auto bg-[#f8f6f1] px-3 py-3">
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-[#e5ddd0] bg-white p-2 shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
-            {(stage === 'preview'
-              ? [
-                  { id: 'map' as const, label: 'Bản đồ', icon: MapIcon },
-                  { id: 'preview' as const, label: 'Thử nhanh', icon: BookOpen },
-                ]
-              : [
-                  { id: 'map' as const, label: 'Bản đồ', icon: MapIcon },
-                  { id: 'summary' as const, label: 'Lời giải', icon: BookOpen },
-                  { id: 'method' as const, label: methodTabLabel, icon: ListTree },
-                ]
-            ).map(tab => {
-              const Icon = tab.icon;
-              const isActive = mobileStageTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setMobileStageTab(tab.id)}
-                  className={`inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-sm font-bold transition-colors ${
-                    isActive
-                      ? 'bg-slate-900 text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)]'
-                      : 'bg-slate-50 text-slate-600'
-                  } ${stage === 'result' && tab.id === 'method' ? 'col-span-2' : ''}`}
-                >
-                  <Icon className="h-4 w-4" /> {tab.label}
-                </button>
-              );
-            })}
-          </div>
+          <div className="rounded-[28px] border border-[#e5ddd0] bg-white shadow-[0_16px_34px_rgba(15,23,42,0.08)]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                  {stage === 'result' ? 'Bản đồ kết quả' : 'Bản đồ xem trước'}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700">
+                  {stage === 'result' ? 'Bản đồ luôn hiển thị để theo dõi lời giải' : 'Kiểm tra đồ thị trước khi chốt lời giải'}
+                </div>
+              </div>
 
-          {mobileStageTab === 'map' && (
-            <div className="space-y-3">
-              <div className="overflow-hidden rounded-[28px] border border-[#e5ddd0] bg-white shadow-[0_16px_34px_rgba(15,23,42,0.08)]">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                      {stage === 'result' ? 'Bản đồ kết quả' : 'Bản đồ xem trước'}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileInsightOpen(open => !open)}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                  {isMobileInsightOpen ? 'Ẩn chi tiết' : 'Chi tiết'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMapExpanded(expanded => !expanded)}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
+                >
+                  {isMobileMapExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  {isMobileMapExpanded ? 'Thu gọn' : 'Mở rộng'}
+                </button>
+              </div>
+            </div>
+
+            <div className="px-4 py-3">
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
+                  {locations.length} điểm
+                </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+                  {stage === 'result' ? `${displayRoutes.length} chặng đang tô` : `${routes.length} cạnh đang xem`}
+                </div>
+                <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                  {stage === 'result' ? 'Đang theo lời giải' : 'Đang ở bước xem trước'}
+                </div>
+              </div>
+            </div>
+
+            {isMobileSubsetMethod && (
+              <div className="border-t border-slate-100 bg-gradient-to-b from-white to-slate-50/70 px-4 py-3">
+                <div className="space-y-3 rounded-[22px] border border-slate-200 bg-white/95 p-3 shadow-[0_12px_26px_rgba(15,23,42,0.06)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="rounded-xl bg-indigo-100 p-2 text-indigo-600">
+                        <Clock3 className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Mô phỏng trực quan</div>
+                        <div className="truncate text-sm font-bold text-slate-800">Điều khiển bản đồ theo từng bước</div>
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-700">
-                      {stage === 'result' ? 'Chạm vào điểm hoặc cạnh để xem chi tiết' : 'Theo dõi đồ thị trước khi chốt lời giải'}
+
+                    <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
+                      Bước {currentStepIdx + 1} / {Math.max(totalSteps, 1)}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsMobileInsightOpen(open => !open)}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
-                  >
-                    <Info className="h-3.5 w-3.5" />
-                    {isMobileInsightOpen ? 'Ẩn chi tiết' : 'Mở chi tiết'}
-                  </button>
+
+                  <StepNavigator
+                    totalSteps={totalSteps}
+                    currentIdx={currentStepIdx}
+                    onPrev={handlePrevStep}
+                    onNext={handleNextStep}
+                    onJump={handleJumpToStep}
+                    isPlaying={isPlayingSteps}
+                    onPlayToggle={() => setIsPlayingSteps(playing => !playing)}
+                    playSpeedMs={playSpeedMs}
+                    onSpeedChange={setPlaySpeedMs}
+                    compact
+                    layout="toolbar"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className={`relative overflow-hidden ${isMobileMapExpanded ? 'h-[76svh] min-h-[480px]' : 'h-[58svh] min-h-[380px]'}`}>
+              <MapCanvas
+                locations={locations}
+                routes={displayRoutes}
+                appMode={appMode}
+                uiMode="view"
+                startId={startId}
+                endId={endId}
+                selectedSubset={locations.map(l => l.id)}
+                currentStep={visibleCurrentStep}
+                highlightedPaths={highlightedPaths}
+                activePathIndex={0}
+                selectedElement={selectedElement}
+                onLocationClick={() => {}}
+                onLocationDrag={() => {}}
+                onCanvasDoubleClick={() => {}}
+                onRouteClick={id => setSelectedElement({ type: 'route', id })}
+                onSelectElement={setSelectedElement}
+                edgeStart={null}
+                onEdgeStartSet={() => {}}
+                onAddRoute={() => {}}
+                allowedTileThemes={['light', 'voyager', 'dark']}
+                compactMapControls
+                compactNodeLabels={isMobileSubsetMethod}
+                fitPadding={isMobileSubsetMethod ? 18 : 28}
+                singleLocationZoom={isMobileSubsetMethod ? 15 : 16}
+                defaultShowDistanceLabels={!isMobileSubsetMethod}
+                subtleWeightLabels={isMobileSubsetMethod}
+                hideScaleControl={isMobileSubsetMethod}
+              />
+
+              {/* map only — insight panel moved below */}
+            </div>
+          </div>
+
+          {isMobileInsightOpen && (
+            <div className="overflow-hidden rounded-[28px] border border-[#e5ddd0] bg-white shadow-[0_16px_34px_rgba(15,23,42,0.08)]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Hồ sơ điểm đến</div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileInsightOpen(false)}
+                  aria-label="Đóng hồ sơ điểm đến"
+                  title="Đóng hồ sơ điểm đến"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-4">
+                <LocationInsightPanel
+                  selectedElement={selectedElement}
+                  locations={locations}
+                  routes={displayRoutes}
+                  appMode={appMode}
+                />
+              </div>
+            </div>
+          )}
+
+          {isMobileMapExpanded ? (
+            <button
+              type="button"
+              onClick={() => setIsMobileMapExpanded(false)}
+              className="flex w-full items-center justify-center rounded-[22px] border border-[#e5ddd0] bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-[0_12px_28px_rgba(15,23,42,0.05)]"
+            >
+              Thu bản đồ để xem bảng chi tiết
+            </button>
+          ) : (
+            <>
+              {stage === 'preview' && previewStagePanel}
+              {stage === 'result' && mobileResultOverlay}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className={`hidden md:grid min-h-[44rem] flex-1 gap-3 overflow-hidden p-3 ${stage === 'result' ? 'grid-cols-1' : isDesktopSubsetMethod ? 'grid-cols-[minmax(0,1fr)_26rem]' : 'grid-cols-[minmax(0,1fr)_24rem]'}`}>
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden gap-3">
+          {stage === 'result' ? (
+            <>
+              <div className="relative flex min-h-[44rem] flex-1 flex-col overflow-hidden rounded-[32px] border border-[#e5ddd0] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Bản đồ kết quả</div>
+                    <div className="mt-1 text-base font-bold text-slate-800">
+                      {appMode === 'cycle' ? 'Theo dõi chu trình tối ưu' : appMode === 'path' ? 'Theo dõi đường đi Hamilton' : 'Theo dõi đường đi ngắn nhất'}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+                      {locations.length} điểm
+                    </div>
+                    <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                      {displayRoutes.length} chặng đang tô
+                    </div>
+                  </div>
                 </div>
 
-                <div className="relative h-[46svh] min-h-[320px] max-h-[560px] overflow-hidden">
+                {appMode === 'subset' && desktopResultTab === 'method' && (
+                  <div className="border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/60 px-5 py-4">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+                      <div className="flex min-w-0 items-center gap-3 xl:w-[19rem] xl:flex-none">
+                        <div className="rounded-2xl bg-indigo-100 p-2 text-indigo-600">
+                          <Clock3 className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Mô phỏng trực quan</div>
+                          <div className="mt-1 truncate text-base font-bold text-slate-800">Bản đồ nhảy theo từng bước giải</div>
+                        </div>
+                      </div>
+
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                          Bước {currentStepIdx + 1} / {Math.max(totalSteps, 1)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <StepNavigator
+                            totalSteps={totalSteps}
+                            currentIdx={currentStepIdx}
+                            onPrev={handlePrevStep}
+                            onNext={handleNextStep}
+                            onJump={handleJumpToStep}
+                            isPlaying={isPlayingSteps}
+                            onPlayToggle={() => setIsPlayingSteps(playing => !playing)}
+                            playSpeedMs={playSpeedMs}
+                            onSpeedChange={setPlaySpeedMs}
+                            compact
+                            layout="toolbar"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="relative min-h-0 flex-1 overflow-hidden bg-[#f8f6f1]">
                   <MapCanvas
                     locations={locations}
                     routes={displayRoutes}
@@ -840,72 +1011,57 @@ export const GraphView: React.FC<GraphViewProps> = ({
                     allowedTileThemes={['light', 'voyager', 'dark']}
                     compactMapControls
                   />
+                  <div className="absolute left-4 top-4 z-[610] w-[22rem] max-h-[calc(100%-2rem)] overflow-y-auto rounded-[24px] border border-white/75 bg-white/94 p-3 shadow-[0_16px_34px_rgba(15,23,42,0.14)] backdrop-blur">
+                      <LocationInsightPanel
+                        selectedElement={selectedElement}
+                        locations={locations}
+                        routes={displayRoutes}
+                        appMode={appMode}
+                      />
+                  </div>
                 </div>
               </div>
 
-              {stage === 'result' && result && (
-                <div className="rounded-[26px] border border-[#e5ddd0] bg-white p-3 shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
-                  <PathDisplay
-                    path={activePath}
-                    totalKm={result.totalDistanceKm}
-                    locations={locations}
-                    appMode={appMode}
-                    allCount={1}
-                  />
-                </div>
-              )}
-
-              {isMobileInsightOpen && (
-                <div className="rounded-[26px] border border-[#e5ddd0] bg-white p-3 shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
-                  <LocationInsightPanel
-                    selectedElement={selectedElement}
-                    locations={locations}
-                    routes={displayRoutes}
-                    appMode={appMode}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {mobileStageTab === 'preview' && previewStagePanel}
-          {mobileStageTab === 'summary' && resultSummaryPanel}
-          {mobileStageTab === 'method' && resultMethodPanel}
-        </div>
-      </div>
-
-      <div className={`hidden md:grid flex-1 overflow-hidden ${isDesktopSubsetMethod ? 'grid-cols-[minmax(0,1fr)_26rem]' : 'grid-cols-[minmax(0,1fr)_23rem]'}`}>
-        {/* Canvas */}
-        <main className="flex-1 flex flex-col overflow-hidden p-3 gap-2 min-w-0">
-          {isDesktopSubsetMethod ? (
+              <div className="overflow-hidden rounded-[30px] border border-[#e5ddd0] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+                {desktopResultPanel}
+              </div>
+            </>
+          ) : isDesktopSubsetMethod ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.08)]">
-              <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-indigo-100 p-2 text-indigo-600">
-                    <Clock3 className="h-5 w-5" />
+              <div className="border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/60 px-5 py-4">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+                  <div className="flex min-w-0 items-center gap-3 xl:w-[19rem] xl:flex-none">
+                    <div className="rounded-2xl bg-indigo-100 p-2 text-indigo-600">
+                      <Clock3 className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Mô phỏng trực quan</div>
+                      <div className="mt-1 truncate text-base font-bold text-slate-800">Bản đồ nhảy theo từng bước giải</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Mô phỏng trực quan</div>
-                    <div className="mt-1 text-base font-bold text-slate-800">Bản đồ nhảy theo từng bước giải</div>
-                  </div>
-                </div>
 
-                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-                  Bước {currentStepIdx + 1} / {Math.max(totalSteps, 1)}
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                      Bước {currentStepIdx + 1} / {Math.max(totalSteps, 1)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <StepNavigator
+                        totalSteps={totalSteps}
+                        currentIdx={currentStepIdx}
+                        onPrev={handlePrevStep}
+                        onNext={handleNextStep}
+                        onJump={handleJumpToStep}
+                        isPlaying={isPlayingSteps}
+                        onPlayToggle={() => setIsPlayingSteps(playing => !playing)}
+                        playSpeedMs={playSpeedMs}
+                        onSpeedChange={setPlaySpeedMs}
+                        compact
+                        layout="toolbar"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <StepNavigator
-                totalSteps={totalSteps}
-                currentIdx={currentStepIdx}
-                onPrev={handlePrevStep}
-                onNext={handleNextStep}
-                onJump={handleJumpToStep}
-                isPlaying={isPlayingSteps}
-                onPlayToggle={() => setIsPlayingSteps(playing => !playing)}
-                playSpeedMs={playSpeedMs}
-                onSpeedChange={setPlaySpeedMs}
-              />
 
               <div className="relative min-h-0 flex-1 overflow-hidden">
                 <MapCanvas
@@ -942,7 +1098,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
               </div>
             </div>
           ) : (
-            <div className="relative flex-1 overflow-hidden">
+            <div className="relative min-h-[44rem] flex-1 overflow-hidden rounded-[30px] border border-[#e5ddd0] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
               <MapCanvas
                 locations={locations}
                 routes={displayRoutes}
@@ -978,94 +1134,21 @@ export const GraphView: React.FC<GraphViewProps> = ({
           )}
         </main>
 
-        <aside className="bg-white border-l border-slate-200 flex flex-col overflow-hidden min-w-0 [contain:layout]">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              {stage === 'result' ? 'Kết quả lộ trình' : 'Xem trước bài toán'}
-            </div>
-            {stage === 'result' && result ? (
-              <div className="mt-3 inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setDesktopResultTab('summary')}
-                  className={`flex-1 rounded-xl px-3 py-2 transition-colors ${desktopResultTab === 'summary' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                >
-                  Lời giải
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDesktopResultTab('method')}
-                  className={`flex-1 rounded-xl px-3 py-2 transition-colors ${desktopResultTab === 'method' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                >
-                  {methodTabLabel}
-                </button>
+        {stage !== 'result' ? (
+          <aside className="flex min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#e5ddd0] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)] [contain:layout]">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Xem trước bài toán
               </div>
-            ) : null}
-          </div>
+            </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {stage === 'result' ? (desktopResultTab === 'summary' ? resultSummaryPanel : resultMethodPanel) : previewStagePanel}
-          </div>
-        </aside>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {previewStagePanel}
+            </div>
+          </aside>
+        ) : null}
       </div>
 
-      {stage === 'result' && (appMode === 'cycle' || appMode === 'path') && remainingVariants.length > 0 && (
-        <section className="shrink-0 border-t border-slate-200 bg-[#f8f6f1] px-4 py-4">
-          <div className="rounded-[28px] border border-[#e5ddd0] bg-white/92 shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
-            <button
-              onClick={() => setShowRemainingCycles(current => !current)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            >
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  {remainingTitle}
-                </div>
-                <div className="mt-1 text-sm text-slate-600">
-                  {remainingDescription}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
-                  {remainingVariants.length} {remainingCountLabel}
-                </span>
-                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showRemainingCycles ? 'rotate-180' : ''}`} />
-              </div>
-            </button>
-
-            {showRemainingCycles && (
-              <div className="border-t border-slate-100 px-4 py-4">
-                <div className="overflow-x-auto no-scrollbar">
-                  <div className="flex gap-4">
-                    {remainingVariants.map((variant, index) => (
-                      <div
-                        key={`${variant.path.join('>')}-${index}`}
-                        className="w-[320px] shrink-0 snap-start rounded-[24px] border border-slate-100 bg-slate-50/80 p-3"
-                      >
-                        <MiniCycleMap
-                          locations={locations}
-                          routes={routes}
-                          appMode={appMode}
-                          startId={startId}
-                          endId={endId}
-                          path={variant.path}
-                        />
-                        <div className="mt-3 flex items-center justify-between gap-3">
-                          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500">
-                            TH {index + 2}
-                          </span>
-                          <span className="text-base font-black text-slate-900">
-                            {variant.weight.toFixed(1)} km
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
     </div>
   );
 };

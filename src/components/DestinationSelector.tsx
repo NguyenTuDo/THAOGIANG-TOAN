@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowRight, Navigation, RotateCcw, Wand2 } from 'lucide-react';
 import { TouristLocation, AppMode, LocationCategory } from '../types';
 import { LocationCard } from './LocationCard';
@@ -115,37 +115,6 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
     });
   }, [locations, activeCategories, nearFar, userCoords, distanceMap]);
 
-  const [activeScrollIdx, setActiveScrollIdx] = useState(0);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  const handleScroll = () => {
-    if (!scrollContainerRef.current) return;
-    const container = scrollContainerRef.current;
-    const children = container.children;
-    if (children.length === 0) return;
-
-    const containerCenter = container.scrollLeft + container.clientWidth / 2;
-    let closestIndex = 0;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i] as HTMLElement;
-      if (!child.classList.contains('snap-center')) continue;
-      const childCenter = child.offsetLeft + child.clientWidth / 2;
-      const distance = Math.abs(containerCenter - childCenter);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = i;
-      }
-    }
-    setActiveScrollIdx(closestIndex);
-  };
-
-  useEffect(() => {
-    setActiveScrollIdx(0);
-    scrollContainerRef.current?.scrollTo({ left: 0, behavior: 'instant' });
-  }, [filteredLocations.length]);
-
   const count = selectedIds.length;
   const startId = selectedIds[0] ?? null;
   const isEndMode = appMode === 'path' || appMode === 'subset';
@@ -167,24 +136,53 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
     appMode === 'cycle' ? 'from-[#102c3f] via-[#1f4f73] to-[#d7a15e]' :
     appMode === 'path' ? 'from-[#4d1f32] via-[#8c355c] to-[#d29b73]' :
     'from-[#4f3618] via-[#9b6735] to-[#ead4ad]';
+  const flowCards = [
+    {
+      id: 'pick',
+      title: t('Chọn điểm', 'Pick stops'),
+      note: t(`Đã có ${count}/${appMode === 'subset' ? Math.max(count, cfg.required) : cfg.required} điểm`, `${count} selected`),
+      active: count < cfg.required,
+      done: count >= cfg.required,
+    },
+    {
+      id: 'end',
+      title: t('Chọn điểm cuối', 'Choose endpoint'),
+      note: isEndMode
+        ? endId
+          ? t('Đã chốt điểm kết thúc', 'Endpoint selected')
+          : t('Cần chọn sau khi đủ điểm', 'Select after enough stops')
+        : t('Không cần cho bài toán này', 'Not needed in this mode'),
+      active: isEndMode && count >= cfg.required && !endId,
+      done: !isEndMode || (endId !== null && endId !== startId),
+    },
+    {
+      id: 'preview',
+      title: t('Xem trước đồ thị', 'Preview graph'),
+      note: isReady
+        ? t('Có thể mở bước xem trước', 'Ready for preview')
+        : t('Khóa cho đến khi đủ dữ liệu', 'Locked until ready'),
+      active: isReady,
+      done: false,
+    },
+  ];
 
   return (
     <div className="guide-shell flex h-full min-h-0 flex-col overflow-hidden text-slate-900">
       <div className="flex-1 overflow-y-auto">
-        <section className="relative isolate overflow-hidden px-4 pb-3 pt-4 text-white md:px-8 md:pb-4 md:pt-6 lg:px-10">
+        <section className="relative isolate overflow-hidden px-3 pb-3 pt-3 text-white md:px-8 md:pb-4 md:pt-6 lg:px-10">
           <div className="absolute inset-0 overflow-hidden rounded-[26px] md:rounded-[34px]">
             <div className="absolute inset-0 bg-[url('/images/hcm.jpg')] bg-cover bg-center" />
             <div className={`absolute inset-0 bg-gradient-to-r ${themeClass} opacity-75`} />
             <div className="absolute inset-0 bg-black/35" />
           </div>
 
-          <div className="relative rounded-[26px] px-4 py-5 md:rounded-[34px] md:px-8 md:py-10 lg:px-10">
+          <div className="relative rounded-[26px] px-4 py-4 md:rounded-[34px] md:px-8 md:py-10 lg:px-10">
             <div className="max-w-3xl space-y-3 md:space-y-0">
               <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/78">
                 {t('Lộ trình quanh Marie Curie', 'Routes around Marie Curie')}
               </div>
 
-              <h1 className="display-serif max-w-2xl text-[2rem] font-black leading-[0.96] tracking-tight md:mt-2 md:text-5xl">
+              <h1 className="display-serif max-w-2xl text-[1.75rem] font-black leading-[0.96] tracking-tight md:mt-2 md:text-5xl">
                 {displayTitle}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-white/88 md:mt-3 md:text-base">
@@ -233,7 +231,25 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
           </div>
         </section>
 
-        <section className="px-4 pb-28 pt-4 md:px-8 md:pb-32 md:pt-6 lg:px-10">
+        <section className="px-3 pb-28 pt-4 md:px-8 md:pb-32 md:pt-6 lg:px-10">
+          <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3 md:mb-6 md:gap-3">
+            {flowCards.map(card => (
+              <div
+                key={card.id}
+                className={`rounded-[22px] border px-3 py-3 ${
+                  card.active
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : card.done
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      : 'border-slate-200 bg-white text-slate-600'
+                }`}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-[0.22em] opacity-80">{card.title}</div>
+                <div className="mt-1 text-sm font-semibold">{card.note}</div>
+              </div>
+            ))}
+          </div>
+
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3 md:mb-6">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-400">{t('Chọn điểm dừng', 'Choose destinations')}</div>
@@ -358,18 +374,14 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
             </div>
           </div>
 
-          <div 
-            ref={scrollContainerRef}
-            onScroll={handleScroll}
-            className="flex -mx-4 gap-3 overflow-x-auto px-4 pb-5 snap-x snap-mandatory no-scrollbar md:mx-0 md:grid md:grid-cols-2 md:gap-5 md:px-0 md:pb-0 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-          >
+          <div className="flex gap-3 overflow-x-auto pb-3 no-scrollbar md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:pb-0 xl:grid-cols-3">
             {filteredLocations.map(loc => {
               const idx = selectedIds.indexOf(loc.id);
               const isSelected = idx !== -1;
               const isDisabled = !isSelected && count >= cfg.max;
 
               return (
-                <div key={loc.id} className="w-[248px] shrink-0 snap-center md:w-auto">
+                <div key={loc.id} className="w-[260px] shrink-0 md:w-auto md:min-w-0">
                   <LocationCard
                     location={loc}
                     selectionIndex={isSelected ? idx : null}
@@ -383,24 +395,6 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
               );
             })}
           </div>
-
-          {/* Pagination dots for mobile */}
-          {filteredLocations.length > 0 && (
-            <div className="mt-1 flex items-center justify-center gap-1.5 md:hidden">
-              {filteredLocations.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    scrollContainerRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-                  }}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    i === activeScrollIdx ? 'w-6 bg-slate-800' : 'w-1.5 bg-slate-300'
-                  }`}
-                  aria-label={`Go to location ${i + 1}`}
-                />
-              ))}
-            </div>
-          )}
           {filteredLocations.length === 0 && (
             <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
               {t('Không có địa điểm nào khớp bộ lọc.', 'No destinations match the current filters.')}
