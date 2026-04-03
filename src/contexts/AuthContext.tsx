@@ -33,10 +33,11 @@ const DEMO_ADMIN_KEY = 'tourist.demo.admin';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function buildProfile(user: User): AuthProfile {
+  const isAdmin = user.user_metadata?.role === 'admin';
   return {
     id: user.id,
     email: user.email ?? '',
-    role: 'admin',
+    role: isAdmin ? 'admin' : 'guest',
     displayName: user.user_metadata?.full_name || user.email || 'Nguoi dung',
   };
 }
@@ -95,6 +96,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw new Error(error.message);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.user_metadata?.role === 'admin') return;
+
+      await supabase.auth.signOut();
+      throw new Error('Tài khoản này đăng nhập được nhưng chưa có quyền admin. Vào Supabase Authentication > Users > mở user này > User Metadata và thêm {"role":"admin"}.');
     },
     async signOut() {
       const supabase = getSupabase();
