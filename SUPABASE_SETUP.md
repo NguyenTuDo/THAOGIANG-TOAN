@@ -65,16 +65,34 @@ create policy "read_all" on routes for select using (true);
 create policy "read_all" on preset_selections for select using (true);
 
 create policy "admin_only" on locations for all to authenticated
-  using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-  with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+  using (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  )
+  with check (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
 
 create policy "admin_only" on routes for all to authenticated
-  using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-  with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+  using (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  )
+  with check (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
 
 create policy "admin_only" on preset_selections for all to authenticated
-  using ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-  with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+  using (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  )
+  with check (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
 ```
 
 ---
@@ -104,11 +122,15 @@ alter table locations add column if not exists lng float8;
 
 **Authentication** → **Users** → **Add user**
 
-- Email: `admin@truong.edu.vn`
+- Email: `tu.donguyen123@gmail.com`
 - Mật khẩu: (tự đặt)
 - Bấm **Create user**
 
-Sau đó cuộn xuống **User Metadata** → dán vào:
+Với code hiện tại, đúng email trên có thể vào admin ngay cả khi chưa có metadata role.
+
+Nếu sau này muốn thêm admin khác, có 2 cách:
+- Cách 1: thêm email đó vào biến môi trường `VITE_ADMIN_EMAILS`
+- Cách 2: cuộn xuống **User Metadata** → dán vào:
 ```json
 {
   "role": "admin"
@@ -126,6 +148,7 @@ Tạo file `.env` trong `C:\App\WEB-THAO-GIANG\unified-tourist-app`:
 ```env
 VITE_SUPABASE_URL=https://xxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGc...
+VITE_ADMIN_EMAILS=tu.donguyen123@gmail.com
 ```
 
 Thay bằng **Project URL** và **anon key** từ Bước 1.

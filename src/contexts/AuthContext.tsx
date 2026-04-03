@@ -32,8 +32,19 @@ const GUEST_PROFILE: AuthProfile = {
 const DEMO_ADMIN_KEY = 'tourist.demo.admin';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function getAllowedAdminEmails(): string[] {
+  const configured = import.meta.env.VITE_ADMIN_EMAILS as string | undefined;
+  const emails = (configured || 'tu.donguyen123@gmail.com')
+    .split(',')
+    .map(email => email.trim().toLowerCase())
+    .filter(Boolean);
+
+  return Array.from(new Set(emails));
+}
+
 function buildProfile(user: User): AuthProfile {
-  const isAdmin = user.user_metadata?.role === 'admin';
+  const normalizedEmail = (user.email ?? '').trim().toLowerCase();
+  const isAdmin = user.user_metadata?.role === 'admin' || getAllowedAdminEmails().includes(normalizedEmail);
   return {
     id: user.id,
     email: user.email ?? '',
@@ -98,10 +109,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw new Error(error.message);
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (user?.user_metadata?.role === 'admin') return;
+      const normalizedEmail = (user?.email ?? '').trim().toLowerCase();
+      const isAdmin = user?.user_metadata?.role === 'admin' || getAllowedAdminEmails().includes(normalizedEmail);
+      if (isAdmin) return;
 
       await supabase.auth.signOut();
-      throw new Error('Tài khoản này đăng nhập được nhưng chưa có quyền admin. Vào Supabase Authentication > Users > mở user này > User Metadata và thêm {"role":"admin"}.');
+      throw new Error('Tài khoản này đăng nhập được nhưng chưa nằm trong danh sách admin. Hãy thêm email này vào VITE_ADMIN_EMAILS hoặc gán User Metadata {"role":"admin"}.');
     },
     async signOut() {
       const supabase = getSupabase();

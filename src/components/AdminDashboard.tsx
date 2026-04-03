@@ -434,7 +434,7 @@ export function AdminDashboard({
     const friendlyMessage = missingColumnKeywords.some(col => rawMessage.includes(col))
       ? 'Supabase đang thiếu cột. Vào SUPABASE_SETUP.md → Bước 2b và chạy SQL nâng cấp schema.'
       : permissionKeywords.some(keyword => rawMessage.toLowerCase().includes(keyword))
-        ? 'Tài khoản hiện tại chưa có quyền ghi dữ liệu trên Supabase. Vào Authentication > Users và thêm User Metadata {"role":"admin"} cho tài khoản này, rồi đăng nhập lại.'
+        ? 'Tài khoản hiện tại chưa có quyền ghi dữ liệu trên Supabase. Hãy cập nhật policy theo email admin trong SUPABASE_SETUP.md, hoặc thêm User Metadata {"role":"admin"} cho tài khoản này rồi đăng nhập lại.'
       : rawMessage;
     setStatusTone('error');
     setStatus(friendlyMessage);

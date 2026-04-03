@@ -50,7 +50,7 @@ export function AuthPanel() {
       <div className="mt-4 grid gap-3 text-sm text-slate-600">
         <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
           <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          Khách xem không cần tài khoản. Chỉ tài khoản có User Metadata <code>{'{"role":"admin"}'}</code> đăng nhập tại <code>/admin</code> mới dùng để thêm, sửa, xóa dữ liệu.
+          Khách xem không cần tài khoản. Chỉ email admin đã cấu hình, hoặc tài khoản có User Metadata <code>{'{"role":"admin"}'}</code>, đăng nhập tại <code>/admin</code> mới dùng để thêm, sửa, xóa dữ liệu.
         </div>
       </div>
 

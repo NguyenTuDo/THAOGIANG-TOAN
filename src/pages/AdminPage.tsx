@@ -120,7 +120,7 @@ export function AdminPage() {
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Đăng nhập thất bại.';
       const friendlyMessage = rawMessage === 'Invalid login credentials'
-        ? 'Email hoặc mật khẩu chưa đúng. Hãy dùng đúng tài khoản đã tạo trong Supabase Authentication và nhớ gán User Metadata {"role":"admin"} cho tài khoản đó.'
+        ? 'Email hoặc mật khẩu chưa đúng. Hãy dùng đúng tài khoản đã tạo trong Supabase Authentication. Nếu muốn, có thể cho quyền admin bằng email cấu hình hoặc bằng User Metadata {"role":"admin"}.'
         : rawMessage;
       setMessage(friendlyMessage);
     } finally {
@@ -199,7 +199,7 @@ export function AdminPage() {
               </p>
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
                 <strong>Cách đơn giản nhất:</strong> vào <code>Authentication &gt; Users</code>, tạo đúng một tài khoản cho thầy.
-                Sau đó mở tài khoản đó và thêm <code>User Metadata</code> là <code>{'{"role":"admin"}'}</code>, rồi mới đăng nhập ở <code>/admin</code>.
+                Nếu email đó nằm trong danh sách admin của app thì đăng nhập dùng luôn được. Nếu không, mở tài khoản đó và thêm <code>User Metadata</code> là <code>{'{"role":"admin"}'}</code>, rồi đăng nhập ở <code>/admin</code>.
               </div>
 
               {isBackendEnabled ? (

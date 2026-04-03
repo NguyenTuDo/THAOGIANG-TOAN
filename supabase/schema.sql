@@ -93,15 +93,33 @@ create policy "read_all" on locations         for select using (true);
 create policy "read_all" on routes             for select using (true);
 create policy "read_all" on preset_selections  for select using (true);
 
--- Ghi/xóa chỉ dành cho admin (JWT user_metadata.role = 'admin')
+-- Ghi/xóa chỉ dành cho email admin cố định hoặc user_metadata.role = 'admin'
 create policy "admin_only" on locations for all to authenticated
-  using      ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-  with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+  using      (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  )
+  with check (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
 
 create policy "admin_only" on routes for all to authenticated
-  using      ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-  with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+  using      (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  )
+  with check (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
 
 create policy "admin_only" on preset_selections for all to authenticated
-  using      ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-  with check ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+  using      (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  )
+  with check (
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'tu.donguyen123@gmail.com'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
