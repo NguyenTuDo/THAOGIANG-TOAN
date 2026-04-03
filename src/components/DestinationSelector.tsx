@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowRight, Navigation, RotateCcw, Wand2 } from 'lucide-react';
 import { TouristLocation, AppMode, LocationCategory } from '../types';
 import { LocationCard } from './LocationCard';
+import { LocationDetailModal } from './LocationDetailModal';
 import { useLang, CATEGORY_EN } from '../contexts/LanguageContext';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { haversineKm } from '../lib/geo';
@@ -75,6 +76,7 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
   const { lang, t } = useLang();
   const cfg = MODE_CONFIG[appMode];
   const { state: geoState, request: requestGeo } = useGeolocation();
+  const [detailLocationId, setDetailLocationId] = useState<string | null>(null);
 
   // Category filter
   const [activeCategories, setActiveCategories] = useState<LocationCategory[]>([]);
@@ -121,6 +123,9 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
   const selectedLocations = selectedIds
     .map(id => locations.find(loc => loc.id === id))
     .filter((loc): loc is TouristLocation => Boolean(loc));
+  const detailLocation = detailLocationId
+    ? locations.find(location => location.id === detailLocationId) ?? null
+    : null;
   const isReady = appMode === 'path'
     ? count === cfg.required && endId !== null && endId !== startId
     : isEndMode
@@ -389,7 +394,8 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
                     isEnd={isEndMode && loc.id === endId}
                     isDisabled={isDisabled}
                     distanceKm={distanceMap[loc.id]}
-                    onClick={() => onToggle(loc.id)}
+                    onOpen={() => setDetailLocationId(loc.id)}
+                    onToggle={() => onToggle(loc.id)}
                   />
                 </div>
               );
@@ -445,6 +451,21 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
 
         </section>
       </div>
+
+      <LocationDetailModal
+        location={detailLocation}
+        isOpen={detailLocation !== null}
+        isSelected={detailLocation ? selectedIds.includes(detailLocation.id) : false}
+        isStart={detailLocation ? selectedIds[0] === detailLocation.id : false}
+        isEnd={Boolean(detailLocation && isEndMode && endId === detailLocation.id)}
+        isDisabled={Boolean(detailLocation && !selectedIds.includes(detailLocation.id) && count >= cfg.max)}
+        distanceKm={detailLocation ? distanceMap[detailLocation.id] : undefined}
+        onClose={() => setDetailLocationId(null)}
+        onToggle={() => {
+          if (!detailLocation) return;
+          onToggle(detailLocation.id);
+        }}
+      />
 
       <div className="guide-footer px-4 py-3 md:px-8 md:py-4 lg:px-10">
         <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:gap-3">

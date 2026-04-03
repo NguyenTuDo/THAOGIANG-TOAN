@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Map as MapIcon, MapPinned, Navigation, Sparkles } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Map as MapIcon, MapPinned, Navigation, Plus, Sparkles } from 'lucide-react';
 import { TouristLocation } from '../types';
 import { useLang, CATEGORY_EN } from '../contexts/LanguageContext';
 
@@ -76,11 +76,12 @@ interface LocationCardProps {
   isEnd: boolean;
   isDisabled: boolean;
   distanceKm?: number;
-  onClick: () => void;
+  onOpen: () => void;
+  onToggle: () => void;
 }
 
 export const LocationCard: React.FC<LocationCardProps> = ({
-  location, selectionIndex, isStart, isEnd, isDisabled, distanceKm, onClick,
+  location, selectionIndex, isStart, isEnd, isDisabled, distanceKm, onOpen, onToggle,
 }) => {
   const { lang, t } = useLang();
   const [imgIdx, setImgIdx] = useState(0);
@@ -96,7 +97,6 @@ export const LocationCard: React.FC<LocationCardProps> = ({
     if (newIdx !== imgIdx) setImgIdx(newIdx);
   };
 
-  // Sync scroll on imgIdx change (for auto-play and buttons)
   useEffect(() => {
     if (!imgScrollRef.current) return;
     const { scrollLeft, clientWidth } = imgScrollRef.current;
@@ -115,16 +115,18 @@ export const LocationCard: React.FC<LocationCardProps> = ({
       : [];
   const hasMultiple = allImages.length > 1;
 
-  // Auto-play khi hover
   useEffect(() => {
     if (hovered && hasMultiple) {
       intervalRef.current = setInterval(() => {
         setImgIdx(i => (i + 1) % allImages.length);
-      }, 1200);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      }, 1400);
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [hovered, hasMultiple, allImages.length]);
 
   const theme = CATEGORY_THEME[location.category] ?? {
@@ -143,23 +145,22 @@ export const LocationCard: React.FC<LocationCardProps> = ({
     : (location.shortIntro ?? location.description);
   const displayCategory = lang === 'en' ? (CATEGORY_EN[location.category] ?? location.category) : location.category;
   const displayNeighborhood = t(location.neighborhood ?? '', location.neighborhoodEn);
-  const displayBestFor = t(location.bestFor ?? '', location.bestForEn);
+  const compactAreaLabel = displayNeighborhood
+    ? displayNeighborhood.split(',')[0]?.trim() ?? displayNeighborhood
+    : '';
   const displayHighlights = lang === 'en' && location.highlightsEn?.length
     ? location.highlightsEn
     : location.highlights;
-  const addToTripLabel = t('Thêm vào hành trình', 'Add to trip');
-  const chooseLabel = t('Chọn điểm dừng này', 'Select this stop');
-  const visitLabel = t(
-    location.visitDuration ?? 'Hợp cho một chặng đi bộ ngắn',
-    location.visitDuration ?? 'Great for a short walk',
-  );
-
+  const toggleLabel = isSelected ? t('Bỏ khỏi hành trình', 'Remove from trip') : t('Thêm vào hành trình', 'Add to trip');
+  const chooseLabel = t('Nhấn để xem địa danh', 'Tap to explore');
+  const visitBadge = location.visitDuration
+    ? location.visitDuration.split('/')[0]?.trim() ?? location.visitDuration
+    : '';
   const distanceBadgeColor =
     distanceKm === undefined ? null :
     distanceKm < 1 ? 'bg-emerald-500' :
     distanceKm < 3 ? 'bg-amber-500' :
     'bg-slate-500';
-
   const distanceLabel =
     distanceKm === undefined ? null :
     distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` :
@@ -167,28 +168,33 @@ export const LocationCard: React.FC<LocationCardProps> = ({
 
   return (
     <div
-      onClick={isDisabled ? undefined : onClick}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`group relative w-full overflow-hidden rounded-[24px] border border-white/50 text-left transition-all duration-300 md:rounded-[28px] ${
-        isDisabled ? 'scale-[0.98] cursor-not-allowed opacity-40' : 'cursor-pointer hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(15,23,42,0.16)]'
-      } ${
+      role="button"
+      tabIndex={0}
+      aria-label={t(`Xem chi tiết ${displayName}`, `View details for ${displayName}`)}
+      className={`group relative w-full overflow-hidden rounded-[24px] border border-white/60 text-left transition-all duration-300 md:rounded-[28px] ${
         isSelected
           ? `ring-2 ring-offset-4 ring-offset-[#f4efe6] shadow-[0_22px_60px_rgba(15,23,42,0.18)] ${
               isStart ? 'ring-blue-500' : isEnd ? 'ring-rose-500' : 'ring-emerald-500'
             }`
           : 'shadow-[0_10px_35px_rgba(15,23,42,0.08)]'
-      }`}
+      } hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(15,23,42,0.16)]`}
     >
-      <div
-        className={`relative aspect-[1.12] overflow-hidden bg-gradient-to-br md:aspect-[0.92] ${theme.gradient}`}
-      >
+      <div className={`relative aspect-[1.06] overflow-hidden bg-gradient-to-br md:aspect-[0.9] ${theme.gradient}`}>
         <div
           ref={imgScrollRef}
           onScroll={handleImageScroll}
           className="flex h-full w-full overflow-x-auto snap-x snap-mandatory no-scrollbar"
         >
-          {allImages.map((src, i) => (
+          {allImages.map(src => (
             <img
               key={src}
               src={src}
@@ -197,18 +203,14 @@ export const LocationCard: React.FC<LocationCardProps> = ({
             />
           ))}
         </div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.32),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.68)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.32),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.02)_0%,rgba(15,23,42,0.72)_100%)]" />
 
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-4">
-          <div className="rounded-full border border-white/20 bg-white/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/86 backdrop-blur-sm">
+        <div className="absolute left-4 top-4">
+          <div className="rounded-full border border-white/20 bg-black/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/86 backdrop-blur-sm">
             {lang === 'en' ? theme.eyebrowEn : theme.eyebrow}
-          </div>
-          <div className="rounded-full border border-white/20 bg-black/10 px-3 py-1 text-[10px] font-semibold text-white/80 backdrop-blur-sm">
-            {lang === 'en' ? theme.metaEn : theme.meta}
           </div>
         </div>
 
-        {/* Distance badge */}
         {distanceBadgeColor && distanceLabel && (
           <div className={`absolute left-4 top-14 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white shadow ${distanceBadgeColor}`}>
             <Navigation className="h-3 w-3" />
@@ -216,33 +218,37 @@ export const LocationCard: React.FC<LocationCardProps> = ({
           </div>
         )}
 
-        {/* Image carousel controls */}
         {hasMultiple && (
           <>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i - 1 + allImages.length) % allImages.length); }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setImgIdx(i => (i - 1 + allImages.length) % allImages.length);
+              }}
               aria-label={t('Ảnh trước', 'Previous image')}
               title={t('Ảnh trước', 'Previous image')}
-              className="absolute left-2 top-1/2 -translate-y-1/2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
+              className="absolute left-3 top-[58%] flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setImgIdx(i => (i + 1) % allImages.length); }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setImgIdx(i => (i + 1) % allImages.length);
+              }}
               aria-label={t('Ảnh tiếp theo', 'Next image')}
               title={t('Ảnh tiếp theo', 'Next image')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
+              className="absolute right-3 top-[58%] flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            {/* Dots */}
-            <div className="absolute bottom-16 left-1/2 flex -translate-x-1/2 gap-1">
-              {allImages.map((_, i) => (
+            <div className="absolute bottom-[1.15rem] left-1/2 flex -translate-x-1/2 gap-1">
+              {allImages.map((_, index) => (
                 <span
-                  key={i}
-                  className={`h-1.5 w-1.5 rounded-full transition-colors ${i === imgIdx ? 'bg-white' : 'bg-white/40'}`}
+                  key={`${location.id}-${index}`}
+                  className={`h-1.5 rounded-full transition-all ${index === imgIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/40'}`}
                 />
               ))}
             </div>
@@ -253,12 +259,19 @@ export const LocationCard: React.FC<LocationCardProps> = ({
           <div className={`mb-2 text-[11px] font-medium uppercase tracking-[0.28em] ${theme.accent}`}>
             {displayCategory}
           </div>
-          <div className="max-w-[11rem] text-[1.45rem] font-black leading-[0.95] tracking-tight text-white md:text-[1.7rem]">
+          <div className="max-w-[15rem] text-[1.45rem] font-black leading-[0.95] tracking-tight text-white md:max-w-[17rem] md:text-[1.9rem]">
             {displayName}
           </div>
-          <div className="mt-3 flex items-center gap-2 text-[11px] text-white/84">
-            <MapPinned className="h-3.5 w-3.5" />
-            <span>{shortLabel}</span>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/84">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/15 px-2.5 py-1 backdrop-blur-sm">
+              <MapPinned className="h-3.5 w-3.5" />
+              {shortLabel}
+            </span>
+            {visitBadge && (
+              <span className="inline-flex rounded-full border border-white/15 bg-black/15 px-2.5 py-1 backdrop-blur-sm">
+                {visitBadge}
+              </span>
+            )}
           </div>
         </div>
 
@@ -272,7 +285,7 @@ export const LocationCard: React.FC<LocationCardProps> = ({
               isStart ? 'bg-blue-500' : isEnd ? 'bg-rose-500' : 'bg-emerald-500'
             }`}
           >
-            {selectionIndex! + 1}
+            {selectionIndex + 1}
           </div>
         )}
         {isStart && (
@@ -287,66 +300,76 @@ export const LocationCard: React.FC<LocationCardProps> = ({
         )}
       </div>
 
-        <div className={`bg-white px-4 pb-4 pt-3 transition-colors ${isSelected ? 'bg-white' : 'group-hover:bg-[#fffdfa]'}`}>
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-[12px] leading-relaxed text-slate-600">
-            {previewText}
-          </p>
-          {isSelected && (
-            <CheckCircle2
-              className={`mt-0.5 h-5 w-5 shrink-0 ${
-                isStart ? 'text-blue-500' : isEnd ? 'text-rose-500' : 'text-emerald-500'
-              }`}
-            />
-          )}
+      <div className={`bg-white px-4 pb-4 pt-3 transition-colors ${isSelected ? 'bg-white' : 'group-hover:bg-[#fffdfa]'}`}>
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <p className="line-clamp-2 text-[12px] leading-relaxed text-slate-600">
+              {previewText}
+            </p>
+            {isSelected && (
+              <CheckCircle2
+                className={`mt-0.5 h-5 w-5 shrink-0 ${
+                  isStart ? 'text-blue-500' : isEnd ? 'text-rose-500' : 'text-emerald-500'
+                }`}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            {compactAreaLabel && (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                {compactAreaLabel}
+              </span>
+            )}
+            {displayHighlights?.[0] && (
+              <span className="rounded-full bg-[#f5efe6] px-2.5 py-1 font-medium text-[#7a5a2b]">
+                {displayHighlights[0]}
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] text-slate-500">
-          <span className="inline-flex items-center gap-1">
-            <Clock3 className="h-3.5 w-3.5" />
-            {visitLabel}
-          </span>
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
           <div className="flex items-center gap-2">
             {location.googleMapsUrl && (
               <a
                 href={location.googleMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-600 hover:bg-blue-100"
+                onClick={(event) => event.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-2 text-[10px] font-semibold text-blue-600 hover:bg-blue-100"
               >
                 <MapIcon className="h-3 w-3" />
                 Maps
               </a>
             )}
-            <span className="floating-mark inline-flex items-center gap-1 font-semibold text-slate-700">
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-              {addToTripLabel}
-            </span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!isDisabled || isSelected) onToggle();
+              }}
+              disabled={isDisabled && !isSelected}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-bold transition-all ${
+                isSelected
+                  ? isStart
+                    ? 'bg-blue-500 text-white'
+                    : isEnd
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-emerald-500 text-white'
+                  : isDisabled
+                    ? 'cursor-not-allowed bg-slate-200 text-slate-400'
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+              }`}
+            >
+              {isSelected ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+              <span className="floating-mark">{toggleLabel}</span>
+            </button>
           </div>
         </div>
-        {(displayNeighborhood || displayBestFor) && (
-          <div className="mt-2 space-y-1 text-[11px] text-slate-500">
-            {displayNeighborhood && (
-              <div>{t('Khu vực', 'Area')}: <span className="font-medium text-slate-700">{displayNeighborhood}</span></div>
-            )}
-            {displayBestFor && (
-              <div>{t('Phù hợp', 'Best for')}: <span className="font-medium text-slate-700">{displayBestFor}</span></div>
-            )}
-          </div>
-        )}
-        {displayHighlights && displayHighlights.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {displayHighlights.slice(0, 3).map(item => (
-              <span key={item} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600">
-                {item}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
-      {!isSelected && !isDisabled && (
+      {!isSelected && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/0 opacity-0 transition-all duration-300 group-hover:bg-white/5 group-hover:opacity-100">
           <div className="rounded-full bg-white/92 px-3 py-1 text-xs font-bold text-slate-700 shadow">
             {chooseLabel}
