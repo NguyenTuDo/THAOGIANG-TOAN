@@ -465,6 +465,8 @@ export function AdminDashboard({
         bestForEn: locationForm.bestForEn?.trim() || undefined,
         highlights: highlightsDraft.split(',').map(s => s.trim()).filter(Boolean),
         highlightsEn: highlightsEnDraft.split(',').map(s => s.trim()).filter(Boolean),
+        x: Math.round(locationForm.x),
+        y: Math.round(locationForm.y),
         lat: locationForm.lat || undefined,
         lng: locationForm.lng || undefined,
       };
