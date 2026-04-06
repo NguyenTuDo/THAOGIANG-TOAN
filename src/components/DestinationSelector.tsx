@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Navigation, RotateCcw, Wand2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Navigation, RotateCcw, Wand2 } from 'lucide-react';
 import { TouristLocation, AppMode, LocationCategory } from '../types';
 import { LocationCard } from './LocationCard';
 import { LocationDetailModal } from './LocationDetailModal';
@@ -137,6 +137,10 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
   const displaySubtitle = lang === 'en' ? cfg.subtitleEn : cfg.subtitle;
   const displayStory = lang === 'en' ? cfg.storyEn : cfg.story;
   const displayNeed = lang === 'en' ? cfg.needEn : cfg.need;
+  const selectedSummaryText = selectedLocations
+    .slice(0, 3)
+    .map(loc => t(loc.fullName, loc.fullNameEn))
+    .join(', ');
   const themeClass =
     appMode === 'cycle' ? 'from-[#102c3f] via-[#1f4f73] to-[#d7a15e]' :
     appMode === 'path' ? 'from-[#4d1f32] via-[#8c355c] to-[#d29b73]' :
@@ -274,37 +278,57 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
           </div>
 
           {count > 0 && (
-            <div className="mb-4 rounded-[22px] border border-[#e8ded0] bg-white/90 px-3 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] md:mb-6 md:rounded-[26px] md:px-4">
-              <div className="mb-2 flex items-center justify-between gap-3 md:mb-0 md:flex-wrap md:justify-start">
-                <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{t('Hành trình đang chọn', 'Current route')}</span>
-                <button
-                  onClick={onClearAll}
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-red-600 md:ml-auto md:px-3 md:py-1.5 md:text-xs"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  {t('Làm lại', 'Reset')}
-                </button>
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar md:flex-wrap md:items-center md:overflow-visible md:pb-0">
-              {selectedIds.map((id, idx) => {
-                const loc = locations.find(l => l.id === id)!;
-                const isStart = idx === 0;
-                const isEnd = isEndMode && id === endId;
-
-                return (
-                  <span
-                    key={id}
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-bold md:text-xs ${
-                      isStart ? 'border-blue-200 bg-blue-50 text-blue-700' :
-                      isEnd ? 'border-rose-200 bg-rose-50 text-rose-700' :
-                      'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    }`}
+            <div className="sticky top-2 z-20 mb-4 md:top-4 md:mb-6">
+              <div className="rounded-[24px] border border-[#d8ccb8] bg-[rgba(255,250,243,0.94)] px-3 py-3 shadow-[0_20px_40px_rgba(15,23,42,0.09)] backdrop-blur md:rounded-[26px] md:px-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_8px_20px_rgba(16,185,129,0.22)]">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                          {t('Đã chọn xong bước này', 'Selection confirmed')}
+                        </div>
+                        <div className="text-sm font-black text-slate-900 md:text-base">
+                          {t(`${count} địa điểm đang có trong hành trình`, `${count} places are in this route`)}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">
+                      {selectedSummaryText}
+                      {count > 3 ? t(` và thêm ${count - 3} điểm khác.`, ` and ${count - 3} more.`) : '.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={onClearAll}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#e4d9c8] bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition-colors hover:border-red-200 hover:text-red-600 md:text-xs"
                   >
-                    {idx + 1}. {t(loc.fullName, loc.fullNameEn)}
-                    {isStart ? ` • ${t('XP', 'Start')}` : isEnd ? ` • ${t('KT', 'End')}` : ''}
-                  </span>
-                );
-              })}
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {t('Làm lại', 'Reset')}
+                  </button>
+                </div>
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar md:flex-wrap md:items-center md:overflow-visible md:pb-0">
+                  {selectedIds.map((id, idx) => {
+                    const loc = locations.find(l => l.id === id)!;
+                    const isStart = idx === 0;
+                    const isEnd = isEndMode && id === endId;
+
+                    return (
+                      <span
+                        key={id}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-bold md:text-xs ${
+                          isStart ? 'border-blue-200 bg-blue-50 text-blue-700' :
+                          isEnd ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                          'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {idx + 1}. {t(loc.fullName, loc.fullNameEn)}
+                        {isStart ? ` • ${t('XP', 'Start')}` : isEnd ? ` • ${t('KT', 'End')}` : ''}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -379,14 +403,14 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
             </div>
           </div>
 
-          <div className="flex gap-3 overflow-x-auto pb-3 no-scrollbar md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:pb-0 xl:grid-cols-3">
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-3 no-scrollbar md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:pb-0 xl:grid-cols-3">
             {filteredLocations.map(loc => {
               const idx = selectedIds.indexOf(loc.id);
               const isSelected = idx !== -1;
               const isDisabled = !isSelected && count >= cfg.max;
 
               return (
-                <div key={loc.id} className="w-[260px] shrink-0 md:w-auto md:min-w-0">
+                <div key={loc.id} className="w-[82vw] max-w-[320px] shrink-0 snap-start md:w-auto md:max-w-none md:min-w-0">
                   <LocationCard
                     location={loc}
                     selectionIndex={isSelected ? idx : null}
