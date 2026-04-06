@@ -198,6 +198,8 @@
   border: 0;
   border-radius: 16px;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+  max-width: 260px;
+  white-space: normal;
 }
 
 .map-route-order-icon,
