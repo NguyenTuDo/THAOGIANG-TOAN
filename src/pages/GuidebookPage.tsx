@@ -380,6 +380,12 @@ export function GuidebookPage() {
                 />
               )}
             </section>
+            <p className="px-1 text-center text-[11px] leading-5 text-slate-400">
+              {t(
+                'Các trọng số giữa các đỉnh được cân đối cho phù hợp với quãng đường di chuyển tại Thành phố Hồ Chí Minh (quãng đường thực tế có thể khác biệt chút ít).',
+                'Edge weights are calibrated to approximate travel distances in Ho Chi Minh City (actual distances may vary slightly).',
+              )}
+            </p>
           </div>
         )}
       </main>
