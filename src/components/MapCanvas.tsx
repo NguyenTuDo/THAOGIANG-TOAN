@@ -4,6 +4,7 @@ import { Layers, LocateFixed, Route as RouteIcon, Settings2, X } from 'lucide-re
 import { MapContainer, Marker, Polyline, ScaleControl, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import { GraphCanvasProps } from './GraphCanvas';
 import { haversineKm } from '../lib/geo';
+import { CATEGORY_EN, useLang } from '../contexts/LanguageContext';
 import { getEdgeColor, getNodeColor } from '../lib/graphColors';
 import { Route, TouristLocation } from '../types';
 
@@ -537,6 +538,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
   displayLayoutMode = 'geo',
   displayLayoutOrder = [],
 }) => {
+  const { lang, t } = useLang();
   const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
   const suppressClickLocationIdRef = useRef<string | null>(null);
   const [tileTheme, setTileTheme] = useState<'light' | 'voyager' | 'street' | 'dark'>(
@@ -1038,13 +1040,13 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               >
                 <Tooltip direction="top" offset={[0, -18]} className="map-node-tooltip">
                   <div className="space-y-1.5">
-                    <div className="text-sm font-bold text-slate-900">{location.fullName}</div>
-                    <div className="text-[11px] font-semibold text-slate-500">{location.category}</div>
+                    <div className="text-sm font-bold text-slate-900">{t(location.fullName, location.fullNameEn)}</div>
+                    <div className="text-[11px] font-semibold text-slate-500">{lang === 'en' ? (CATEGORY_EN[location.category] ?? location.category) : location.category}</div>
                     <div className="max-w-[220px] text-xs leading-5 text-slate-600">
-                      {location.shortIntro ?? location.description}
+                      {t(location.shortIntro ?? location.description ?? '', location.shortIntroEn ?? location.descriptionEn)}
                     </div>
                     {location.visitDuration && (
-                      <div className="text-[11px] text-slate-400">Gợi ý thời lượng: {location.visitDuration}</div>
+                      <div className="text-[11px] text-slate-400">{t('Gợi ý thời lượng', 'Suggested visit')}: {location.visitDuration}</div>
                     )}
                   </div>
                 </Tooltip>
@@ -1139,15 +1141,15 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
             type="button"
             onClick={() => setMapControlsOpen(current => !current)}
             className="absolute right-3 top-3 z-[500] inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/92 px-4 py-2 text-sm font-semibold text-slate-800 shadow-[0_14px_26px_rgba(15,23,42,0.14)] backdrop-blur hover:bg-white"
-            title="Cài đặt bản đồ"
+            title={t('Cài đặt bản đồ', 'Map settings')}
           >
-            {mapControlsOpen ? <X className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />} Cài đặt
+            {mapControlsOpen ? <X className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />} {t('Cài đặt', 'Settings')}
           </button>
         )}
         {mapControlsOpen && (
         <div className={`absolute right-3 ${compactMapControls ? 'top-16' : 'top-3'} z-[500] w-56 rounded-2xl border border-white/70 bg-white/92 p-3 shadow-[0_16px_34px_rgba(15,23,42,0.16)] backdrop-blur`}>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Bản đồ nâng cao</div>
-        <div className="mt-2 text-sm font-bold text-slate-900">Điều khiển hiển thị</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{t('Bản đồ nâng cao', 'Advanced map')}</div>
+        <div className="mt-2 text-sm font-bold text-slate-900">{t('Điều khiển hiển thị', 'Display controls')}</div>
 
         <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-1">
           {allowedTileThemes.includes('light') && (
@@ -1156,7 +1158,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               onClick={() => setTileTheme('light')}
               className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'light' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
             >
-              Sáng
+              {t('Sáng', 'Light')}
             </button>
           )}
           {allowedTileThemes.includes('voyager') && (
@@ -1165,7 +1167,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               onClick={() => setTileTheme('voyager')}
               className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'voyager' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
             >
-              Màu
+              {t('Màu', 'Color')}
             </button>
           )}
           {allowedTileThemes.includes('street') && (
@@ -1183,7 +1185,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
               onClick={() => setTileTheme('dark')}
               className={`rounded-xl px-2 py-2 text-[11px] font-semibold ${tileTheme === 'dark' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
             >
-              Tối
+              {t('Tối', 'Dark')}
             </button>
           )}
         </div>
@@ -1194,7 +1196,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
             onClick={() => mapInstance && fitMapToLocations(mapInstance, displayLocations, fitPadding, singleLocationZoom)}
             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            <span className="inline-flex items-center gap-2"><LocateFixed className="h-4 w-4" /> Căn lại khung nhìn</span>
+            <span className="inline-flex items-center gap-2"><LocateFixed className="h-4 w-4" /> {t('Căn lại khung nhìn', 'Fit view')}</span>
             <span className="text-[11px] text-slate-400">Fit</span>
           </button>
           <button
@@ -1202,8 +1204,8 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
             onClick={() => setShowDistanceLabels(current => !current)}
             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            <span className="inline-flex items-center gap-2"><RouteIcon className="h-4 w-4" /> Nhãn khoảng cách</span>
-            <span className="text-[11px] text-slate-400">{showDistanceLabels ? 'Bật' : 'Tắt'}</span>
+            <span className="inline-flex items-center gap-2"><RouteIcon className="h-4 w-4" /> {t('Nhãn khoảng cách', 'Distance labels')}</span>
+            <span className="text-[11px] text-slate-400">{showDistanceLabels ? t('Bật', 'On') : t('Tắt', 'Off')}</span>
           </button>
           <button
             type="button"
@@ -1211,14 +1213,14 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
             disabled={polygonLayoutActive}
             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="inline-flex items-center gap-2"><Layers className="h-4 w-4" /> Nền map</span>
-            <span className="text-[11px] text-slate-400">{polygonLayoutActive ? 'Ẩn trong Dễ nhìn' : (effectiveShowMapBackground ? 'Bật' : 'Tắt')}</span>
+            <span className="inline-flex items-center gap-2"><Layers className="h-4 w-4" /> {t('Nền map', 'Map background')}</span>
+            <span className="text-[11px] text-slate-400">{polygonLayoutActive ? t('Ẩn trong Dễ nhìn', 'Hidden in Easy view') : (effectiveShowMapBackground ? t('Bật', 'On') : t('Tắt', 'Off'))}</span>
           </button>
         </div>
 
         <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-          <div className="inline-flex items-center gap-1.5 font-semibold text-slate-700"><Layers className="h-3.5 w-3.5" /> Cơ chế nâng cao</div>
-          <div className="mt-1">Đổi kiểu nền, bật hoặc tắt nền map và tô nhấn khác nhau theo từng bài để dữ liệu nổi bật hơn.</div>
+          <div className="inline-flex items-center gap-1.5 font-semibold text-slate-700"><Layers className="h-3.5 w-3.5" /> {t('Cơ chế nâng cao', 'Advanced mode')}</div>
+          <div className="mt-1">{t('Đổi kiểu nền, bật hoặc tắt nền map và tô nhấn khác nhau theo từng bài để dữ liệu nổi bật hơn.', 'Switch tile style, toggle map background, and apply per-mode highlights to make data stand out.')}</div>
         </div>
         </div>
         )}

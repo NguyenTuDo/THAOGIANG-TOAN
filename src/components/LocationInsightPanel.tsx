@@ -201,15 +201,15 @@ export const LocationInsightPanel = React.memo(({
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {displayNeighborhood && (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
             <div className="inline-flex items-center gap-2 font-semibold text-slate-800"><MapPinned className="h-4 w-4 text-sky-600" /> {t('Khu vực', 'Area')}</div>
-            <div className="mt-1 text-sm leading-7 text-slate-600">{displayNeighborhood}</div>
+            <div className="mt-1 text-xs leading-5 text-slate-600">{displayNeighborhood}</div>
           </div>
         )}
         {selectedLocation.visitDuration && (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
             <div className="inline-flex items-center gap-2 font-semibold text-slate-800"><Clock3 className="h-4 w-4 text-amber-600" /> {t('Thời lượng', 'Visit time')}</div>
-            <div className="mt-1 text-sm leading-7 text-slate-600">{selectedLocation.visitDuration}</div>
+            <div className="mt-1 text-xs leading-5 text-slate-600">{selectedLocation.visitDuration}</div>
           </div>
         )}
       </div>
@@ -222,9 +222,9 @@ export const LocationInsightPanel = React.memo(({
       {(displayBestFor || selectedLocation.googleMapsUrl) && (
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {displayBestFor && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
               <div className="inline-flex items-center gap-2 font-semibold text-slate-800"><Navigation className="h-4 w-4 text-emerald-600" /> {t('Phù hợp', 'Best for')}</div>
-              <div className="mt-1 text-sm leading-7 text-slate-600">{displayBestFor}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">{displayBestFor}</div>
             </div>
           )}
           {selectedLocation.googleMapsUrl && (
