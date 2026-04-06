@@ -1,5 +1,6 @@
 import React from 'react';
 import { TouristLocation, Route, AlgorithmResult, AlgorithmStep, AppMode } from '../types';
+import { useLang } from '../contexts/LanguageContext';
 import { MapCanvas } from './MapCanvas';
 import { PathDisplay } from './PathDisplay';
 
@@ -31,32 +32,12 @@ const STEP_ICONS = {
   update: '⟳',
 };
 
-const SUBSET_STATUS_META = {
-  current: {
-    label: 'Đang chốt',
-    rowClass: 'bg-amber-50',
-    badgeClass: 'bg-amber-100 text-amber-700',
-  },
-  settled: {
-    label: 'Đã chốt',
-    rowClass: 'bg-emerald-50/60',
-    badgeClass: 'bg-emerald-100 text-emerald-700',
-  },
-  frontier: {
-    label: 'Đã có nhãn',
-    rowClass: 'bg-sky-50/60',
-    badgeClass: 'bg-sky-100 text-sky-700',
-  },
-  unreached: {
-    label: 'Chưa với tới',
-    rowClass: '',
-    badgeClass: 'bg-slate-100 text-slate-500',
-  },
-  target: {
-    label: 'Đích đang theo dõi',
-    rowClass: 'bg-violet-50/70',
-    badgeClass: 'bg-violet-100 text-violet-700',
-  },
+const SUBSET_STATUS_STYLE = {
+  current:  { rowClass: 'bg-amber-50',       badgeClass: 'bg-amber-100 text-amber-700'   },
+  settled:  { rowClass: 'bg-emerald-50/60',  badgeClass: 'bg-emerald-100 text-emerald-700' },
+  frontier: { rowClass: 'bg-sky-50/60',      badgeClass: 'bg-sky-100 text-sky-700'       },
+  unreached:{ rowClass: '',                  badgeClass: 'bg-slate-100 text-slate-500'   },
+  target:   { rowClass: 'bg-violet-50/70',   badgeClass: 'bg-violet-100 text-violet-700' },
 };
 
 function MiniVariantMap({
@@ -129,7 +110,16 @@ function MiniVariantMap({
 export const SolutionPanel: React.FC<SolutionPanelProps> = ({
   result, currentStepIdx, appMode, locations, routes, detailMode, showResolvedPathHeader = true,
 }) => {
+  const { t } = useLang();
   const currentStep: AlgorithmStep | undefined = result?.steps[currentStepIdx];
+
+  const SUBSET_STATUS_META = {
+    current:  { ...SUBSET_STATUS_STYLE.current,   label: t('Đang chốt', 'Processing') },
+    settled:  { ...SUBSET_STATUS_STYLE.settled,   label: t('Đã chốt', 'Settled')     },
+    frontier: { ...SUBSET_STATUS_STYLE.frontier,  label: t('Đã có nhãn', 'Labelled') },
+    unreached:{ ...SUBSET_STATUS_STYLE.unreached, label: t('Chưa với tới', 'Unreached') },
+    target:   { ...SUBSET_STATUS_STYLE.target,    label: t('Đích đang theo dõi', 'Target') },
+  };
   const shouldShowResolvedPathHeader = showResolvedPathHeader && (detailMode === 'result' || appMode !== 'subset');
 
   const getSegmentDist = (fromId: string, toId: string): number | null => {
@@ -148,10 +138,10 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center text-slate-400">
         <div className="mb-3 text-4xl">🗺️</div>
-        <div className="mb-1 text-sm font-semibold text-slate-500">Chưa có kết quả</div>
+        <div className="mb-1 text-sm font-semibold text-slate-500">{t('Chưa có kết quả', 'No result yet')}</div>
         <div className="text-xs leading-relaxed">
-          Chọn điểm xuất phát bên trái và nhấn{' '}
-          <span className="font-bold text-slate-600">"Tìm Lộ Trình"</span>
+          {t('Chọn điểm xuất phát bên trái và nhấn', 'Choose a start point on the left and press')}{' '}
+          <span className="font-bold text-slate-600">{t('"Tìm Lộ Trình"', '"Find Route"')}</span>
         </div>
       </div>
     );
@@ -190,7 +180,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
           ) : (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-700">
               <span>✗</span>
-              <span>{appMode === 'cycle' ? 'Không tìm thấy chu trình Hamilton' : appMode === 'path' ? 'Không tìm thấy đường đi Hamilton' : 'Không tìm thấy đường đi ngắn nhất'}</span>
+              <span>{appMode === 'cycle' ? t('Không tìm thấy chu trình Hamilton', 'No Hamiltonian cycle found') : appMode === 'path' ? t('Không tìm thấy đường đi Hamilton', 'No Hamiltonian path found') : t('Không tìm thấy đường đi ngắn nhất', 'No shortest path found')}</span>
             </div>
           )}
         </div>
@@ -200,13 +190,13 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
         !result.found ? (
           <div className="flex-1 overflow-y-auto px-3 py-3">
             <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs leading-6 text-red-700">
-              <div className="font-bold">Không có lời giải</div>
+              <div className="font-bold">{t('Không có lời giải', 'No solution')}</div>
               <div className="mt-1">
                 {appMode === 'cycle'
-                  ? 'Không tồn tại chu trình Hamilton trong đồ thị này. Thử chọn bộ điểm khác hoặc thêm tuyến đường kết nối.'
+                  ? t('Không tồn tại chu trình Hamilton trong đồ thị này. Thử chọn bộ điểm khác hoặc thêm tuyến đường kết nối.', 'No Hamiltonian cycle exists in this graph. Try a different set of stops or add more connecting routes.')
                   : appMode === 'path'
-                    ? 'Không tồn tại đường đi Hamilton từ điểm đầu đến điểm cuối.'
-                    : 'Không tồn tại đường đi nối hai đầu mút trong đồ thị hiện tại.'}
+                    ? t('Không tồn tại đường đi Hamilton từ điểm đầu đến điểm cuối.', 'No Hamiltonian path exists from start to end.')
+                    : t('Không tồn tại đường đi nối hai đầu mút trong đồ thị hiện tại.', 'No path connects the two endpoints in the current graph.')}
               </div>
             </div>
           </div>
@@ -218,7 +208,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
               <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
                 <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Toàn bộ chu trình Hamilton ({result.allCycles.length} phương án)
+                    {t(`Toàn bộ chu trình Hamilton (${result.allCycles.length} phương án)`, `All Hamiltonian cycles (${result.allCycles.length} variants)`)}
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -226,7 +216,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/60">
                         <th className="px-2 py-1 text-left font-semibold text-slate-400">#</th>
-                        <th className="px-2 py-1 text-left font-semibold text-slate-400">Chu trình</th>
+                        <th className="px-2 py-1 text-left font-semibold text-slate-400">{t('Chu trình', 'Cycle')}</th>
                         <th className="px-2 py-1 text-right font-semibold text-slate-400">km</th>
                         <th className="px-2 py-1 text-center font-semibold text-slate-400"></th>
                       </tr>
@@ -273,7 +263,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
             <div className="overflow-hidden rounded-xl border border-emerald-100 bg-white">
               <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50/40 px-3 py-2">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                  {appMode === 'cycle' ? 'Chu trình tối ưu — phương án đại diện' : appMode === 'subset' ? 'Đường đi ngắn nhất' : 'Đường đi tối ưu'}
+                  {appMode === 'cycle' ? t('Chu trình tối ưu — phương án đại diện', 'Optimal cycle — representative') : appMode === 'subset' ? t('Đường đi ngắn nhất', 'Shortest path') : t('Đường đi tối ưu', 'Optimal path')}
                 </div>
                 <div className="text-xs font-black text-emerald-700">
                   {result.totalDistanceKm.toFixed(1)} km
@@ -311,7 +301,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                   <tfoot>
                     <tr className="border-t border-emerald-100 bg-emerald-50">
                       <td colSpan={2} className="px-2 py-2 text-xs font-bold text-emerald-700">
-                        Tổng cộng
+                        {t('Tổng cộng', 'Total')}
                       </td>
                       <td className="px-2 py-2 text-right text-sm font-black text-emerald-800">
                         {result.totalDistanceKm.toFixed(1)} km
@@ -323,39 +313,39 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
             </div>
 
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[10px] leading-5 text-slate-600">
-              <span className="font-bold text-slate-700">Lớp 2 — Diễn giải cách làm: </span>
+              <span className="font-bold text-slate-700">{t('Lớp 2 — Diễn giải cách làm: ', 'Layer 2 — How it works: ')}</span>
               {appMode === 'subset'
-                ? <>Bấm tab <strong>Cách giải</strong> để xem các bước chốt khoảng cách ngắn nhất của thuật toán.</>
-                : <>Bấm tab <strong>Liệt kê phương án</strong> để xem toàn bộ phương án hợp lệ đã được sắp theo tổng quãng đường.</>}
+                ? <>{t('Bấm tab', 'Switch to the')} <strong>{t('Cách giải', 'Method')}</strong> {t('để xem các bước chốt khoảng cách ngắn nhất của thuật toán.', 'tab to see each step of the shortest-distance algorithm.')}</>
+                : <>{t('Bấm tab', 'Switch to the')} <strong>{t('Liệt kê phương án', 'All variants')}</strong> {t('để xem toàn bộ phương án hợp lệ đã được sắp theo tổng quãng đường.', 'tab to see all valid variants sorted by total distance.')}</>}
             </div>
           </div>
         )
       ) : appMode === 'cycle' || appMode === 'path' ? (
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[10px] leading-5 text-slate-600">
-            <span className="font-bold text-slate-700">Cách làm: </span>
+            <span className="font-bold text-slate-700">{t('Cách làm: ', 'Method: ')}</span>
             {appMode === 'cycle'
-              ? 'liệt kê toàn bộ chu trình Hamilton hợp lệ, sau đó sắp theo tổng quãng đường để chọn chu trình ngắn nhất.'
-              : 'liệt kê toàn bộ đường đi Hamilton hợp lệ từ điểm đầu đến điểm cuối, sau đó sắp theo tổng quãng đường để chọn đường đi ngắn nhất.'}
+              ? t('liệt kê toàn bộ chu trình Hamilton hợp lệ, sau đó sắp theo tổng quãng đường để chọn chu trình ngắn nhất.', 'enumerate all valid Hamiltonian cycles, then sort by total distance to pick the shortest.')
+              : t('liệt kê toàn bộ đường đi Hamilton hợp lệ từ điểm đầu đến điểm cuối, sau đó sắp theo tổng quãng đường để chọn đường đi ngắn nhất.', 'enumerate all valid Hamiltonian paths from start to end, then sort by total distance to pick the shortest.')}
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {appMode === 'cycle'
-                  ? `Toàn bộ phương án hợp lệ (${result.allCycles.length} chu trình)`
-                  : `Toàn bộ phương án hợp lệ (${result.allPaths.length} đường đi)`}
+                  ? t(`Toàn bộ phương án hợp lệ (${result.allCycles.length} chu trình)`, `All valid variants (${result.allCycles.length} cycles)`)
+                  : t(`Toàn bộ phương án hợp lệ (${result.allPaths.length} đường đi)`, `All valid variants (${result.allPaths.length} paths)`)}
               </div>
-              <div className="text-[10px] text-slate-400">Sắp theo km tăng dần</div>
+              <div className="text-[10px] text-slate-400">{t('Sắp theo km tăng dần', 'Sorted by km ascending')}</div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[32rem] text-[10px]">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">
                     <th className="px-2 py-1 text-left font-semibold text-slate-400">#</th>
-                    <th className="px-2 py-1 text-left font-semibold text-slate-400">Phương án</th>
+                    <th className="px-2 py-1 text-left font-semibold text-slate-400">{t('Phương án', 'Route')}</th>
                     <th className="px-2 py-1 text-right font-semibold text-slate-400">km</th>
-                    <th className="px-2 py-1 text-center font-semibold text-slate-400">Đánh dấu</th>
+                    <th className="px-2 py-1 text-center font-semibold text-slate-400">{t('Đánh dấu', 'Mark')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -389,7 +379,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                           {variant.weight.toFixed(1)}
                         </td>
                         <td className="px-2 py-1 text-center text-slate-500">
-                          {isOptimal ? <span className="font-bold text-emerald-700">Tối ưu</span> : 'Hợp lệ'}
+                          {isOptimal ? <span className="font-bold text-emerald-700">{t('Tối ưu', 'Optimal')}</span> : t('Hợp lệ', 'Valid')}
                         </td>
                       </tr>
                     );
@@ -402,9 +392,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
               <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
                 <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {appMode === 'cycle' ? 'Mini map các chu trình phụ' : 'Mini map các phương án phụ'}
+                    {appMode === 'cycle' ? t('Mini map các chu trình phụ', 'Mini map — other cycles') : t('Mini map các phương án phụ', 'Mini map — other variants')}
                   </div>
-                  <div className="text-[10px] text-slate-400">{secondaryVariants.length} phương án</div>
+                  <div className="text-[10px] text-slate-400">{secondaryVariants.length} {t('phương án', 'variants')}</div>
                 </div>
                 <div className="overflow-x-auto no-scrollbar px-3 py-3">
                   <div className="flex gap-4">
@@ -440,14 +430,14 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
           {appMode === 'subset' ? (
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] leading-5 text-slate-600">
-                Dijkstra: chọn đỉnh có $d$ nhỏ nhất, xét các cạnh kề, cập nhật nhãn nếu tìm được đường ngắn hơn.
+                {t('Dijkstra: chọn đỉnh có $d$ nhỏ nhất, xét các cạnh kề, cập nhật nhãn nếu tìm được đường ngắn hơn.', 'Dijkstra: pick the node with smallest $d$, check adjacent edges, update label if a shorter path is found.')}
               </div>
 
               {currentStep && (
                 <div className={`rounded-r-lg border-l-4 px-3 py-2 text-xs leading-relaxed fade-in-up ${STEP_COLORS[currentStep.type]}`}>
                   <div className="mb-1 flex items-center justify-between gap-3">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      {currentStep.phaseLabel ?? 'Bước hiện tại'}
+                      {currentStep.phaseLabel ?? t('Bước hiện tại', 'Current step')}
                     </div>
                     <div className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                       {currentStepIdx + 1} / {result.steps.length}
@@ -462,8 +452,8 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
 
               <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
                 <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Hàng đợi</div>
-                  <div className="text-[10px] text-slate-400">Theo $d$ tăng dần</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Hàng đợi', 'Queue')}</div>
+                  <div className="text-[10px] text-slate-400">{t('Theo $d$ tăng dần', 'Sorted by $d$ ascending')}</div>
                 </div>
                 {subsetPriorityQueue.length > 0 ? (
                   <div className="max-h-40 overflow-y-auto">
@@ -482,7 +472,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                   </div>
                 ) : (
                   <div className="px-3 py-3 text-[10px] leading-5 text-slate-500">
-                    Không còn đỉnh chờ.
+                    {t('Không còn đỉnh chờ.', 'No nodes waiting.')}
                   </div>
                 )}
               </div>
@@ -490,17 +480,17 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
               {currentStep?.distanceSnapshot && (
                 <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Nhãn điểm</div>
-                    <div className="text-[10px] text-slate-400">$d$, trước, trạng thái</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Nhãn điểm', 'Node labels')}</div>
+                    <div className="text-[10px] text-slate-400">{t('$d$, trước, trạng thái', '$d$, prev, status')}</div>
                   </div>
                   <div className="max-h-52 overflow-auto">
                     <table className="w-full text-[10px]">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50">
-                          <th className="px-2 py-1.5 text-left font-semibold text-slate-500">Điểm</th>
+                          <th className="px-2 py-1.5 text-left font-semibold text-slate-500">{t('Điểm', 'Node')}</th>
                           <th className="px-2 py-1.5 text-right font-semibold text-slate-500">d</th>
-                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">Trước</th>
-                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">Trạng thái</th>
+                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">{t('Trước', 'Prev')}</th>
+                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">{t('Trạng thái', 'Status')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -530,18 +520,18 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
               {currentStep?.edgeEvaluations?.length ? (
                 <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cạnh vừa xét</div>
-                    <div className="text-[10px] text-slate-400">Cũ → mới</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Cạnh vừa xét', 'Edges evaluated')}</div>
+                    <div className="text-[10px] text-slate-400">{t('Cũ → mới', 'Old → new')}</div>
                   </div>
                   <div className="max-h-48 overflow-auto">
                     <table className="w-full text-[10px]">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50">
-                          <th className="px-2 py-1.5 text-left font-semibold text-slate-500">Cạnh</th>
-                          <th className="px-2 py-1.5 text-right font-semibold text-slate-500">Cạnh</th>
-                          <th className="px-2 py-1.5 text-right font-semibold text-slate-500">d cũ</th>
-                          <th className="px-2 py-1.5 text-right font-semibold text-slate-500">d mới</th>
-                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">Kết quả</th>
+                          <th className="px-2 py-1.5 text-left font-semibold text-slate-500">{t('Cạnh', 'Edge')}</th>
+                          <th className="px-2 py-1.5 text-right font-semibold text-slate-500">{t('Cạnh', 'Weight')}</th>
+                          <th className="px-2 py-1.5 text-right font-semibold text-slate-500">{t('d cũ', 'd old')}</th>
+                          <th className="px-2 py-1.5 text-right font-semibold text-slate-500">{t('d mới', 'd new')}</th>
+                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">{t('Kết quả', 'Result')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -557,7 +547,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                             <td className="px-2 py-1.5 text-right font-semibold text-slate-700">{evaluation.candidateDistanceKm.toFixed(1)} km</td>
                             <td className="px-2 py-1.5 text-center">
                               <span className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${evaluation.accepted ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
-                                {evaluation.accepted ? 'Cập nhật' : 'Giữ'}
+                                {evaluation.accepted ? t('Cập nhật', 'Updated') : t('Giữ', 'Kept')}
                               </span>
                             </td>
                           </tr>
@@ -571,9 +561,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
               <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Nhật ký ({result.steps.length} bước)
+                    {t(`Nhật ký (${result.steps.length} bước)`, `Log (${result.steps.length} steps)`)}
                   </div>
-                  <div className="text-[10px] text-slate-400">Tóm tắt</div>
+                  <div className="text-[10px] text-slate-400">{t('Tóm tắt', 'Summary')}</div>
                 </div>
                 <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-1.5">
                   {result.steps.map((step, idx) => (
@@ -608,9 +598,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50">
                           <th className="px-2 py-1.5 text-left font-semibold text-slate-500">
-                            Địa điểm tham gia
+                            {t('Địa điểm tham gia', 'Stops in problem')}
                           </th>
-                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">Trạng thái</th>
+                          <th className="px-2 py-1.5 text-center font-semibold text-slate-500">{t('Trạng thái', 'Status')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -621,20 +611,20 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                           const visitIdx = currentStep.path.indexOf(loc.id);
                           const visitOrder = visitIdx >= 0 ? visitIdx + 1 : null;
 
-                          let status = 'Chưa thăm';
+                          let status = t('Chưa thăm', 'Not visited');
                           let statusClass = 'text-slate-400';
                           let dot = <span className="mr-1 inline-block h-2 w-2 rounded-full bg-slate-200" />;
 
                           if (isCurrent && !isBacktracking) {
-                            status = 'Đang thăm';
+                            status = t('Đang thăm', 'Visiting');
                             statusClass = 'font-bold text-amber-600';
                             dot = <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />;
                           } else if (isCurrent && isBacktracking) {
-                            status = 'Quay lui';
+                            status = t('Quay lui', 'Backtracking');
                             statusClass = 'font-bold text-red-500';
                             dot = <span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-400" />;
                           } else if (inPath) {
-                            status = `Đã thăm (lần ${visitOrder})`;
+                            status = t(`Đã thăm (lần ${visitOrder})`, `Visited (pass ${visitOrder})`);
                             statusClass = 'font-bold text-emerald-600';
                             dot = <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />;
                           }
@@ -660,7 +650,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                     </table>
                   </div>
                   <div className="flex items-center gap-1 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700 border-t border-emerald-100">
-                    ✓ Thuật toán đảm bảo mỗi điểm chỉ được thăm đúng 1 lần
+                    ✓ {t('Thuật toán đảm bảo mỗi điểm chỉ được thăm đúng 1 lần', 'Algorithm guarantees each stop is visited exactly once')}
                   </div>
                 </div>
               )}
@@ -671,9 +661,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
             <div className="mt-2 px-3 pb-3">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Nhật ký ({result.steps.length} bước)
+                  {t(`Nhật ký (${result.steps.length} bước)`, `Log (${result.steps.length} steps)`)}
                 </div>
-                <div className="text-[10px] text-slate-400">Cuộn để xem thêm</div>
+                <div className="text-[10px] text-slate-400">{t('Cuộn để xem thêm', 'Scroll for more')}</div>
               </div>
               <div className="max-h-[18rem] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-1.5 md:max-h-[240px]">
                 {result.steps.map((step, idx) => (

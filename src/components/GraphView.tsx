@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Clapperboard, Clock3, Info, ListTree, Maximize2, Minimize2, Play, RotateCcw, ShieldCheck, Volume2, VolumeX, X } from 'lucide-react';
 import { TouristLocation, Route, AppMode, AlgorithmResult, SelectedElement } from '../types';
+import { useLang } from '../contexts/LanguageContext';
 import { MapCanvas } from './MapCanvas';
 import { LocationInsightPanel } from './LocationInsightPanel';
 import { PathDisplay } from './PathDisplay';
@@ -40,18 +41,20 @@ function ResultViewSwitch({
   activeTab,
   onChange,
   methodLabel,
+  summaryLabel,
   showMethodTab = true,
 }: {
   activeTab: 'summary' | 'method';
   onChange: (tab: 'summary' | 'method') => void;
   methodLabel: string;
+  summaryLabel: string;
   showMethodTab?: boolean;
 }) {
   if (!showMethodTab) {
     return (
       <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-1 text-xs font-bold">
         <div className="rounded-[16px] bg-slate-900 px-3 py-2.5 text-center text-white shadow-[0_10px_20px_rgba(15,23,42,0.16)]">
-          Lời giải
+          {summaryLabel}
         </div>
       </div>
     );
@@ -66,7 +69,7 @@ function ResultViewSwitch({
           activeTab === 'summary' ? 'bg-slate-900 text-white shadow-[0_10px_20px_rgba(15,23,42,0.16)]' : 'text-slate-500'
         }`}
       >
-        Lời giải
+        {summaryLabel}
       </button>
       <button
         type="button"
@@ -94,12 +97,13 @@ function evaluatePreviewPath(
   path: string[],
   routeMap: Map<string, Route>,
   getLocationName: (id: string) => string,
+  t: (vi: string, en: string) => string,
 ): { totalDistanceKm: number | null; valid: boolean; note: string } {
   if (path.length < 2) {
     return {
       totalDistanceKm: null,
       valid: false,
-      note: 'Chưa đủ điểm để tạo tình huống thử.',
+      note: t('Chưa đủ điểm để tạo tình huống thử.', 'Not enough nodes for a trial case.'),
     };
   }
 
@@ -114,7 +118,7 @@ function evaluatePreviewPath(
       return {
         totalDistanceKm: null,
         valid: false,
-        note: `Thiếu cạnh nối ${getLocationName(fromId)} và ${getLocationName(toId)}.`,
+        note: t(`Thiếu cạnh nối ${getLocationName(fromId)} và ${getLocationName(toId)}.`, `Missing edge between ${getLocationName(fromId)} and ${getLocationName(toId)}.`),
       };
     }
 
@@ -124,7 +128,7 @@ function evaluatePreviewPath(
   return {
     totalDistanceKm,
     valid: true,
-    note: `Có thể chạy thử theo lộ trình này với tổng ${totalDistanceKm.toFixed(1)} km.`,
+    note: t(`Có thể chạy thử theo lộ trình này với tổng ${totalDistanceKm.toFixed(1)} km.`, `Trial route covers ${totalDistanceKm.toFixed(1)} km.`),
   };
 }
 
@@ -188,6 +192,7 @@ function buildNearestNeighborTrial(
 export const GraphView: React.FC<GraphViewProps> = ({
   locations, routes, selectedIds, appMode, startId, endId, stage, result, onBack, onSolve, onRerun,
 }) => {
+  const { lang, t } = useLang();
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [isPresentationOpen, setIsPresentationOpen] = useState(false);
   const [activePreviewCaseId, setActivePreviewCaseId] = useState<string>('selection-order');
@@ -229,31 +234,31 @@ export const GraphView: React.FC<GraphViewProps> = ({
         : [];
 
     if (appMode === 'cycle' && orderedSelection.length > 1) {
-      const orderedEval = evaluatePreviewPath(orderedSelection, routeMap, getLocationName);
+      const orderedEval = evaluatePreviewPath(orderedSelection, routeMap, getLocationName, t);
       cases.push({
         id: 'selection-order',
-        title: 'Theo thứ tự đang chọn',
-        description: 'Dùng đúng thứ tự thầy vừa sắp khi chọn điểm.',
+        title: t('Theo thứ tự đang chọn', 'In selection order'),
+        description: t('Dùng đúng thứ tự thầy vừa sắp khi chọn điểm.', 'Uses the exact order you selected the stops.'),
         path: orderedSelection,
         ...orderedEval,
       });
 
       const reversePath = [startId, ...selectedIds.filter(id => id !== startId).reverse(), startId];
-      const reverseEval = evaluatePreviewPath(reversePath, routeMap, getLocationName);
+      const reverseEval = evaluatePreviewPath(reversePath, routeMap, getLocationName, t);
       cases.push({
         id: 'reverse-order',
-        title: 'Đảo chiều vòng tham quan',
-        description: 'Thử đi theo chiều ngược lại để đối chiếu.',
+        title: t('Đảo chiều vòng tham quan', 'Reverse tour direction'),
+        description: t('Thử đi theo chiều ngược lại để đối chiếu.', 'Try going in the opposite direction to compare.'),
         path: reversePath,
         ...reverseEval,
       });
 
       const greedyPath = buildNearestNeighborTrial(selectedIds, startId, null, appMode, routeMap);
-      const greedyEval = evaluatePreviewPath(greedyPath, routeMap, getLocationName);
+      const greedyEval = evaluatePreviewPath(greedyPath, routeMap, getLocationName, t);
       cases.push({
         id: 'greedy-cycle',
-        title: 'Đi cạnh gần nhất trước',
-        description: 'Một cách thử nhanh để xem đồ thị có khép vòng mượt không.',
+        title: t('Đi cạnh gần nhất trước', 'Nearest neighbour first'),
+        description: t('Một cách thử nhanh để xem đồ thị có khép vòng mượt không.', 'A quick trial to check whether the graph closes into a smooth cycle.'),
         path: greedyPath,
         ...greedyEval,
       });
@@ -262,11 +267,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
     if (appMode === 'path') {
       const forwardPath = buildPathModeOrder(selectedIds, startId, endId);
       if (forwardPath.length > 1) {
-        const forwardEval = evaluatePreviewPath(forwardPath, routeMap, getLocationName);
+        const forwardEval = evaluatePreviewPath(forwardPath, routeMap, getLocationName, t);
         cases.push({
           id: 'selection-order',
-          title: 'Theo thứ tự đang chọn',
-          description: 'Đi từ điểm đầu đến điểm cuối theo cấu trúc hiện tại.',
+          title: t('Theo thứ tự đang chọn', 'In selection order'),
+          description: t('Đi từ điểm đầu đến điểm cuối theo cấu trúc hiện tại.', 'Travels from start to end in the current node order.'),
           path: forwardPath,
           ...forwardEval,
         });
@@ -274,11 +279,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
       const reversePath = buildReverseMiddlePath(selectedIds, startId, endId);
       if (reversePath.length > 1) {
-        const reverseEval = evaluatePreviewPath(reversePath, routeMap, getLocationName);
+        const reverseEval = evaluatePreviewPath(reversePath, routeMap, getLocationName, t);
         cases.push({
           id: 'reverse-order',
-          title: 'Đảo phần thân hành trình',
-          description: 'Giữ nguyên hai đầu mút, chỉ đổi thứ tự các điểm ở giữa.',
+          title: t('Đảo phần thân hành trình', 'Reverse middle stops'),
+          description: t('Giữ nguyên hai đầu mút, chỉ đổi thứ tự các điểm ở giữa.', 'Keeps both endpoints, only reverses the middle stops.'),
           path: reversePath,
           ...reverseEval,
         });
@@ -286,11 +291,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
       const greedyPath = buildNearestNeighborTrial(selectedIds, startId, endId, appMode, routeMap);
       if (greedyPath.length > 1) {
-        const greedyEval = evaluatePreviewPath(greedyPath, routeMap, getLocationName);
+        const greedyEval = evaluatePreviewPath(greedyPath, routeMap, getLocationName, t);
         cases.push({
           id: 'greedy-path',
-          title: 'Ghép cạnh gần nhất',
-          description: 'Thử nhanh một đường đi tham khảo trước khi giải tối ưu.',
+          title: t('Ghép cạnh gần nhất', 'Nearest neighbour'),
+          description: t('Thử nhanh một đường đi tham khảo trước khi giải tối ưu.', 'Quick reference path before finding the optimal solution.'),
           path: greedyPath,
           ...greedyEval,
         });
@@ -299,11 +304,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
     if (appMode === 'subset' && startId && endId) {
       const directPath = [startId, endId];
-      const directEval = evaluatePreviewPath(directPath, routeMap, getLocationName);
+      const directEval = evaluatePreviewPath(directPath, routeMap, getLocationName, t);
       cases.push({
         id: 'direct-hop',
-        title: 'Đi thẳng hai đầu mút',
-        description: 'Kiểm tra nhanh xem có cạnh trực tiếp giữa hai điểm hay không.',
+        title: t('Đi thẳng hai đầu mút', 'Direct hop'),
+        description: t('Kiểm tra nhanh xem có cạnh trực tiếp giữa hai điểm hay không.', 'Quickly checks whether a direct edge exists between the two endpoints.'),
         path: directPath,
         ...directEval,
       });
@@ -321,11 +326,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
       if (transferCandidates.length > 0) {
         const bestTransfer = transferCandidates[0];
         const transferPath = [startId, bestTransfer.id, endId];
-        const transferEval = evaluatePreviewPath(transferPath, routeMap, getLocationName);
+        const transferEval = evaluatePreviewPath(transferPath, routeMap, getLocationName, t);
         cases.push({
           id: 'one-transfer',
-          title: 'Đi qua một điểm trung chuyển',
-          description: 'Xem thử một phương án nối hai đầu mút bằng một điểm đệm.',
+          title: t('Đi qua một điểm trung chuyển', 'Via one transfer'),
+          description: t('Xem thử một phương án nối hai đầu mút bằng một điểm đệm.', 'Tries connecting the two endpoints through one intermediate stop.'),
           path: transferPath,
           ...transferEval,
         });
@@ -333,11 +338,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
       const orderedSubsetPath = [startId, ...selectedIds.filter(id => id !== startId && id !== endId), endId];
       if (orderedSubsetPath.length > 1) {
-        const orderedSubsetEval = evaluatePreviewPath(orderedSubsetPath, routeMap, getLocationName);
+        const orderedSubsetEval = evaluatePreviewPath(orderedSubsetPath, routeMap, getLocationName, t);
         cases.push({
           id: 'selection-order',
-          title: 'Theo thứ tự đang chọn',
-          description: 'Giữ nguyên thứ tự chọn để so sánh với lời giải ngắn nhất.',
+          title: t('Theo thứ tự đang chọn', 'In selection order'),
+          description: t('Giữ nguyên thứ tự chọn để so sánh với lời giải ngắn nhất.', 'Keeps the selection order to compare with the shortest path.'),
           path: orderedSubsetPath,
           ...orderedSubsetEval,
         });
@@ -345,7 +350,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
     }
 
     return cases;
-  }, [appMode, endId, getLocationName, routeMap, selectedIds, startId]);
+  }, [appMode, endId, getLocationName, lang, routeMap, selectedIds, startId, t]);
 
   useEffect(() => {
     setActivePreviewCaseId(previewCases[0]?.id ?? 'selection-order');
@@ -412,19 +417,22 @@ export const GraphView: React.FC<GraphViewProps> = ({
   }, [routes]);
 
   const MODE_LABEL = {
-    cycle: { label: 'Bài 1 — Chu Trình Hamilton', color: 'bg-indigo-600' },
-    path:  { label: 'Bài 2 — Đường Đi Hamilton',  color: 'bg-rose-600' },
-    subset:{ label: 'Bài 3 — Đường Đi Ngắn Nhất', color: 'bg-amber-600' },
+    cycle: { label: t('Bài 1 — Chu Trình Hamilton', 'Mode 1 — Hamiltonian Cycle'), color: 'bg-indigo-600' },
+    path:  { label: t('Bài 2 — Đường Đi Hamilton', 'Mode 2 — Hamiltonian Path'),   color: 'bg-rose-600' },
+    subset:{ label: t('Bài 3 — Đường Đi Ngắn Nhất', 'Mode 3 — Shortest Path'),     color: 'bg-amber-600' },
   };
 
   const possibleEdgeCount = Math.max((locations.length * (locations.length - 1)) / 2, 1);
   const graphDensity = Math.min((routes.length / possibleEdgeCount) * 100, 100);
   const startDegree = routes.filter(route => route.from === startId || route.to === startId).length;
   const previewIntro = appMode === 'subset'
-    ? 'Bước xem trước này cho phép quan sát tập điểm đang chọn, các cạnh sẵn có và thử nhanh một vài phương án nối hai đầu mút.'
-    : 'Bước xem trước này cho phép kiểm tra các điểm, các cạnh và thử nhanh vài lộ trình trước khi chốt lời giải tối ưu.';
+    ? t('Bước xem trước này cho phép quan sát tập điểm đang chọn, các cạnh sẵn có và thử nhanh một vài phương án nối hai đầu mút.',
+        'This preview step lets you observe the selected subset, available edges, and quickly trial a few paths between the two endpoints.')
+    : t('Bước xem trước này cho phép kiểm tra các điểm, các cạnh và thử nhanh vài lộ trình trước khi chốt lời giải tối ưu.',
+        'This preview step lets you inspect nodes, edges, and quickly trial a few routes before committing to the optimal solution.');
   const totalSteps = result?.steps.length ?? 0;
-  const methodTabLabel = appMode === 'subset' ? 'Cách giải' : 'Liệt kê phương án';
+  const methodTabLabel = appMode === 'subset' ? t('Cách giải', 'Method') : t('Liệt kê phương án', 'All variants');
+  const summaryLabel = t('Lời giải', 'Solution');
   const hasSeparateMethodTab = appMode === 'subset';
   const isDesktopSubsetMethod = stage === 'result' && appMode === 'subset' && desktopResultTab === 'method';
   const isMobileSubsetMethod = stage === 'result' && appMode === 'subset' && mobileStageTab === 'method';
@@ -496,36 +504,36 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Điểm</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Điểm', 'Nodes')}</div>
           <div className="mt-1 text-2xl font-black text-slate-900">{locations.length}</div>
-          <div className="text-slate-500">đang được đưa vào bài toán</div>
+          <div className="text-slate-500">{t('đang được đưa vào bài toán', 'included in this problem')}</div>
         </div>
         <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cạnh</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Cạnh', 'Edges')}</div>
           <div className="mt-1 text-2xl font-black text-slate-900">{routes.length}</div>
-          <div className="text-slate-500">cạnh hiện có trong đồ thị con</div>
+          <div className="text-slate-500">{t('cạnh hiện có trong đồ thị con', 'edges in the subgraph')}</div>
         </div>
         <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mật độ</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Mật độ', 'Density')}</div>
           <div className="mt-1 text-2xl font-black text-slate-900">{graphDensity.toFixed(0)}%</div>
-          <div className="text-slate-500">mức độ liên kết giữa các điểm</div>
+          <div className="text-slate-500">{t('mức độ liên kết giữa các điểm', 'connectivity among nodes')}</div>
         </div>
         <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bậc của điểm đầu</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Bậc của điểm đầu', 'Start degree')}</div>
           <div className="mt-1 text-2xl font-black text-slate-900">{startDegree}</div>
-          <div className="text-slate-500">cạnh chạm vào điểm xuất phát</div>
+          <div className="text-slate-500">{t('cạnh chạm vào điểm xuất phát', 'edges touching start node')}</div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-xs leading-6 text-slate-600">
-        <div><span className="font-bold text-slate-800">Xuất phát:</span> {getLocationName(startId)}</div>
-        {endId && <div><span className="font-bold text-slate-800">Kết thúc:</span> {getLocationName(endId)}</div>}
-        <div><span className="font-bold text-slate-800">Bản đồ đang tô sáng:</span> {activePreviewCase?.title ?? 'Chưa có tình huống thử hợp lệ'}</div>
+        <div><span className="font-bold text-slate-800">{t('Xuất phát:', 'Start:')} </span>{getLocationName(startId)}</div>
+        {endId && <div><span className="font-bold text-slate-800">{t('Kết thúc:', 'End:')} </span>{getLocationName(endId)}</div>}
+        <div><span className="font-bold text-slate-800">{t('Bản đồ đang tô sáng:', 'Map highlighting:')} </span>{activePreviewCase?.title ?? t('Chưa có tình huống thử hợp lệ', 'No valid trial case yet')}</div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
         <div className="border-b border-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Chạy thử vài trường hợp
+          {t('Chạy thử vài trường hợp', 'Trial cases')}
         </div>
         <div className="max-h-[26rem] space-y-2 overflow-y-auto p-2">
           {previewCases.map(item => (
@@ -544,7 +552,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                   <div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div>
                 </div>
                 <div className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${item.valid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {item.valid ? (item.totalDistanceKm !== null ? `${item.totalDistanceKm.toFixed(1)} km` : 'Hợp lệ') : 'Thiếu cạnh'}
+                  {item.valid ? (item.totalDistanceKm !== null ? `${item.totalDistanceKm.toFixed(1)} km` : t('Hợp lệ', 'Valid')) : t('Thiếu cạnh', 'Missing edge')}
                 </div>
               </div>
               <div className="mt-2 text-[11px] font-semibold text-slate-700">
@@ -567,7 +575,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         onClick={onSolve}
         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-emerald-700"
       >
-        <Play className="h-4 w-4" /> Giải bài toán và ra kết quả cuối
+        <Play className="h-4 w-4" /> {t('Giải bài toán và ra kết quả cuối', 'Solve and get final result')}
       </button>
     </div>
   );
@@ -606,8 +614,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
                   <Clock3 className="h-4 w-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Cách giải</div>
-                  <div className="text-sm font-bold text-slate-800">Mô phỏng Dijkstra</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{t('Cách giải', 'Method')}</div>
+                  <div className="text-sm font-bold text-slate-800">{t('Mô phỏng Dijkstra', 'Dijkstra Simulation')}</div>
                 </div>
               </div>
 
@@ -619,7 +627,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                 }`}
               >
                 {isNarrationEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-                {isNarrationEnabled ? 'Đọc' : 'Tắt'}
+                {isNarrationEnabled ? t('Đọc', 'On') : t('Tắt', 'Off')}
               </button>
             </div>
 
@@ -654,12 +662,13 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const desktopResultPanel = stage === 'result' && result ? (
     <div className="flex min-h-0 flex-col overflow-hidden rounded-[26px] border border-white/75 bg-white/95 shadow-[0_20px_40px_rgba(15,23,42,0.16)] backdrop-blur">
       <div className="border-b border-slate-100 px-4 py-3">
-        <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Kết quả tích hợp trên bản đồ</div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">{t('Kết quả tích hợp trên bản đồ', 'Result overlaid on map')}</div>
         <div className="mt-3">
           <ResultViewSwitch
             activeTab={desktopResultTab}
             onChange={setDesktopResultTab}
             methodLabel={methodTabLabel}
+            summaryLabel={summaryLabel}
             showMethodTab={hasSeparateMethodTab}
           />
         </div>
@@ -681,6 +690,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
             activeTab={mobileStageTab === 'method' ? 'method' : 'summary'}
             onChange={tab => setMobileStageTab(tab)}
             methodLabel={methodTabLabel}
+            summaryLabel={summaryLabel}
             showMethodTab={hasSeparateMethodTab}
           />
         </div>
@@ -701,23 +711,23 @@ export const GraphView: React.FC<GraphViewProps> = ({
         <button onClick={onBack}
           className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800">
           <ArrowLeft className="w-4 h-4" />
-          {stage === 'result' ? 'Quay lại xem trước' : 'Quay lại chỉnh điểm'}
+          {stage === 'result' ? t('Quay lại xem trước', 'Back to preview') : t('Quay lại chỉnh điểm', 'Back to selection')}
         </button>
         <div className={`rounded-full px-2.5 py-1 text-xs font-bold text-white ${MODE_LABEL[appMode].color}`}>
           {MODE_LABEL[appMode].label}
         </div>
         <div className={`rounded-full px-2.5 py-1 text-xs font-bold ${stage === 'result' ? 'bg-slate-900 text-white' : 'border border-sky-200 bg-sky-50 text-sky-700'}`}>
-          {stage === 'result' ? 'Bước 3 — Kết quả cuối' : 'Bước 2 — Xem trước đồ thị'}
+          {stage === 'result' ? t('Bước 3 — Kết quả cuối', 'Step 3 — Final result') : t('Bước 2 — Xem trước đồ thị', 'Step 2 — Graph preview')}
         </div>
 
         {/* ⭐ Ràng buộc cốt lõi — badge nổi bật */}
         <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
           <ShieldCheck className="w-3.5 h-3.5" />
-          {appMode === 'subset' ? 'Không cần đi qua tất cả điểm' : 'Mỗi điểm chỉ đi qua 1 lần'}
+          {appMode === 'subset' ? t('Không cần đi qua tất cả điểm', 'No need to visit all stops') : t('Mỗi điểm chỉ đi qua 1 lần', 'Each stop visited exactly once')}
         </div>
 
         <div className="ml-auto rounded-full bg-[#f7f1e7] px-3 py-1 text-xs text-slate-500">
-          {locations.length} điểm · {stage === 'result' ? `${displayRoutes.length} chặng thuộc kết quả` : `${routes.length} cạnh đang hiển thị`}
+          {locations.length} {t('điểm', 'nodes')} · {stage === 'result' ? `${displayRoutes.length} ${t('chặng thuộc kết quả', 'result edges')}` : `${routes.length} ${t('cạnh đang hiển thị', 'edges shown')}`}
         </div>
 
         {stage === 'preview' && (
@@ -725,29 +735,29 @@ export const GraphView: React.FC<GraphViewProps> = ({
             onClick={onSolve}
             className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
           >
-            <Play className="w-3.5 h-3.5" /> Giải bài toán
+            <Play className="w-3.5 h-3.5" /> {t('Giải bài toán', 'Solve')}
           </button>
         )}
 
         <button
           onClick={() => setIsPresentationOpen(true)}
           className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-          title="Mở trình chiếu lộ trình"
+          title={t('Mở trình chiếu lộ trình', 'Open route presentation')}
         >
-          <Clapperboard className="w-3.5 h-3.5" /> Trình chiếu
+          <Clapperboard className="w-3.5 h-3.5" /> {t('Trình chiếu', 'Present')}
         </button>
 
         {stage === 'result' ? (
           <button onClick={onRerun}
             className="flex items-center gap-1 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-emerald-600">
-            <RotateCcw className="w-3.5 h-3.5" /> Giải lại
+            <RotateCcw className="w-3.5 h-3.5" /> {t('Giải lại', 'Re-solve')}
           </button>
         ) : (
           <button
             onClick={() => setActivePreviewCaseId(previewCases[0]?.id ?? 'selection-order')}
             className="flex items-center gap-1 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-emerald-600"
           >
-            <RotateCcw className="w-3.5 h-3.5" /> Làm mới xem trước
+            <RotateCcw className="w-3.5 h-3.5" /> {t('Làm mới xem trước', 'Refresh preview')}
           </button>
         )}
       </div>
@@ -774,10 +784,10 @@ export const GraphView: React.FC<GraphViewProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                  {stage === 'result' ? 'Bản đồ kết quả' : 'Bản đồ xem trước'}
+                  {stage === 'result' ? t('Bản đồ kết quả', 'Result map') : t('Bản đồ xem trước', 'Preview map')}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-slate-700">
-                  {stage === 'result' ? 'Bản đồ luôn hiển thị để theo dõi lời giải' : 'Kiểm tra đồ thị trước khi chốt lời giải'}
+                  {stage === 'result' ? t('Bản đồ luôn hiển thị để theo dõi lời giải', 'Map stays visible to track the solution') : t('Kiểm tra đồ thị trước khi chốt lời giải', 'Inspect the graph before finalising')}
                 </div>
               </div>
 
@@ -788,7 +798,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
                 >
                   <Info className="h-3.5 w-3.5" />
-                  {isMobileInsightOpen ? 'Ẩn chi tiết' : 'Chi tiết'}
+                  {isMobileInsightOpen ? t('Ẩn chi tiết', 'Hide detail') : t('Chi tiết', 'Detail')}
                 </button>
                 <button
                   type="button"
@@ -796,7 +806,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
                 >
                   {isMobileMapExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                  {isMobileMapExpanded ? 'Thu gọn' : 'Mở rộng'}
+                  {isMobileMapExpanded ? t('Thu gọn', 'Collapse') : t('Mở rộng', 'Expand')}
                 </button>
               </div>
             </div>
@@ -804,13 +814,13 @@ export const GraphView: React.FC<GraphViewProps> = ({
             <div className="px-4 py-3">
               <div className="flex gap-2 overflow-x-auto pb-1">
                 <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
-                  {locations.length} điểm
+                  {locations.length} {t('điểm', 'nodes')}
                 </div>
                 <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-                  {stage === 'result' ? `${displayRoutes.length} chặng đang tô` : `${routes.length} cạnh đang xem`}
+                  {stage === 'result' ? `${displayRoutes.length} ${t('chặng đang tô', 'highlighted')}` : `${routes.length} ${t('cạnh đang xem', 'edges shown')}`}
                 </div>
                 <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                  {stage === 'result' ? 'Đang theo lời giải' : 'Đang ở bước xem trước'}
+                  {stage === 'result' ? t('Đang theo lời giải', 'Following solution') : t('Đang ở bước xem trước', 'In preview step')}
                 </div>
               </div>
             </div>
@@ -824,13 +834,13 @@ export const GraphView: React.FC<GraphViewProps> = ({
                         <Clock3 className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Mô phỏng trực quan</div>
-                        <div className="truncate text-sm font-bold text-slate-800">Điều khiển bản đồ theo từng bước</div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{t('Mô phỏng trực quan', 'Visual simulation')}</div>
+                        <div className="truncate text-sm font-bold text-slate-800">{t('Điều khiển bản đồ theo từng bước', 'Map follows each step')}</div>
                       </div>
                     </div>
 
                     <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
-                      Bước {currentStepIdx + 1} / {Math.max(totalSteps, 1)}
+                      {t(`Bước ${currentStepIdx + 1} / ${Math.max(totalSteps, 1)}`, `Step ${currentStepIdx + 1} / ${Math.max(totalSteps, 1)}`)}
                     </div>
                   </div>
 
@@ -889,12 +899,12 @@ export const GraphView: React.FC<GraphViewProps> = ({
           {isMobileInsightOpen && (
             <div className="overflow-hidden rounded-[28px] border border-[#e5ddd0] bg-white shadow-[0_16px_34px_rgba(15,23,42,0.08)]">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Hồ sơ điểm đến</div>
+                <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">{t('Hồ sơ điểm đến', 'Location profile')}</div>
                 <button
                   type="button"
                   onClick={() => setIsMobileInsightOpen(false)}
-                  aria-label="Đóng hồ sơ điểm đến"
-                  title="Đóng hồ sơ điểm đến"
+                  aria-label={t('Đóng hồ sơ điểm đến', 'Close location profile')}
+                  title={t('Đóng hồ sơ điểm đến', 'Close location profile')}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600"
                 >
                   <X className="h-4 w-4" />
@@ -917,7 +927,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
               onClick={() => setIsMobileMapExpanded(false)}
               className="flex w-full items-center justify-center rounded-[22px] border border-[#e5ddd0] bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-[0_12px_28px_rgba(15,23,42,0.05)]"
             >
-              Thu bản đồ để xem bảng chi tiết
+              {t('Thu bản đồ để xem bảng chi tiết', 'Collapse map to view detail panel')}
             </button>
           ) : (
             <>
@@ -935,17 +945,17 @@ export const GraphView: React.FC<GraphViewProps> = ({
               <div className="relative flex min-h-[44rem] flex-1 flex-col overflow-hidden rounded-[32px] border border-[#e5ddd0] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Bản đồ kết quả</div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">{t('Bản đồ kết quả', 'Result map')}</div>
                     <div className="mt-1 text-base font-bold text-slate-800">
-                      {appMode === 'cycle' ? 'Theo dõi chu trình tối ưu' : appMode === 'path' ? 'Theo dõi đường đi Hamilton' : 'Theo dõi đường đi ngắn nhất'}
+                      {appMode === 'cycle' ? t('Theo dõi chu trình tối ưu', 'Tracking optimal cycle') : appMode === 'path' ? t('Theo dõi đường đi Hamilton', 'Tracking Hamiltonian path') : t('Theo dõi đường đi ngắn nhất', 'Tracking shortest path')}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-                      {locations.length} điểm
+                      {locations.length} {t('điểm', 'nodes')}
                     </div>
                     <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                      {displayRoutes.length} chặng đang tô
+                      {displayRoutes.length} {t('chặng đang tô', 'highlighted')}
                     </div>
                   </div>
                 </div>
@@ -958,14 +968,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
                           <Clock3 className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Mô phỏng trực quan</div>
-                          <div className="mt-1 truncate text-base font-bold text-slate-800">Bản đồ nhảy theo từng bước giải</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">{t('Mô phỏng trực quan', 'Visual simulation')}</div>
+                          <div className="mt-1 truncate text-base font-bold text-slate-800">{t('Bản đồ nhảy theo từng bước giải', 'Map follows each algorithm step')}</div>
                         </div>
                       </div>
 
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-                          Bước {currentStepIdx + 1} / {Math.max(totalSteps, 1)}
+                          {t(`Bước ${currentStepIdx + 1} / ${Math.max(totalSteps, 1)}`, `Step ${currentStepIdx + 1} / ${Math.max(totalSteps, 1)}`)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <StepNavigator
@@ -1035,14 +1045,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
                       <Clock3 className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Mô phỏng trực quan</div>
-                      <div className="mt-1 truncate text-base font-bold text-slate-800">Bản đồ nhảy theo từng bước giải</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">{t('Mô phỏng trực quan', 'Visual simulation')}</div>
+                      <div className="mt-1 truncate text-base font-bold text-slate-800">{t('Bản đồ nhảy theo từng bước giải', 'Map follows each algorithm step')}</div>
                     </div>
                   </div>
 
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-                      Bước {currentStepIdx + 1} / {Math.max(totalSteps, 1)}
+                      {t(`Bước ${currentStepIdx + 1} / ${Math.max(totalSteps, 1)}`, `Step ${currentStepIdx + 1} / ${Math.max(totalSteps, 1)}`)}
                     </div>
                     <div className="min-w-0 flex-1">
                       <StepNavigator
@@ -1138,7 +1148,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
           <aside className="flex min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#e5ddd0] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)] [contain:layout]">
             <div className="border-b border-slate-100 px-4 py-3">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Xem trước bài toán
+                {t('Xem trước bài toán', 'Problem preview')}
               </div>
             </div>
 

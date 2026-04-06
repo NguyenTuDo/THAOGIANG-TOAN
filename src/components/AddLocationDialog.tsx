@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { LocationCategory, TouristLocation } from '../types';
+import { CATEGORY_EN, useLang } from '../contexts/LanguageContext';
 
 const CATEGORIES: LocationCategory[] = [
   'Di sản học đường', 'Danh lam thắng cảnh', 'Ẩm thực', 'Mua sắm', 'Bảo tàng', 'Công viên', 'Khách sạn',
@@ -18,6 +19,7 @@ interface AddLocationDialogProps {
 export const AddLocationDialog: React.FC<AddLocationDialogProps> = ({
   open, existingIds, onConfirm, onCancel,
 }) => {
+  const { lang, t } = useLang();
   const [id, setId] = useState('');
   const [fullName, setFullName] = useState('');
   const [category, setCategory] = useState<LocationCategory>('Danh lam thắng cảnh');
@@ -25,7 +27,7 @@ export const AddLocationDialog: React.FC<AddLocationDialogProps> = ({
 
   if (!open) return null;
 
-  const idError = id && existingIds.includes(id.toUpperCase()) ? 'Mã này đã tồn tại' : '';
+  const idError = id && existingIds.includes(id.toUpperCase()) ? t('Mã này đã tồn tại', 'This ID already exists') : '';
   const canSubmit = id.trim() && fullName.trim() && !idError;
 
   const handleSubmit = () => {
@@ -50,7 +52,7 @@ export const AddLocationDialog: React.FC<AddLocationDialogProps> = ({
             <div className="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center">
               <MapPin className="w-4 h-4 text-emerald-600" />
             </div>
-            <span className="font-bold text-slate-800">Thêm Địa Điểm Mới</span>
+            <span className="font-bold text-slate-800">{t('Thêm Địa Điểm Mới', 'Add New Location')}</span>
           </div>
           <button onClick={onCancel} className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center">
             <X className="w-4 h-4 text-slate-500" />
@@ -61,11 +63,11 @@ export const AddLocationDialog: React.FC<AddLocationDialogProps> = ({
         <div className="px-5 py-4 space-y-3">
           <div className="flex gap-3">
             <div className="w-24">
-              <label className="text-xs font-semibold text-slate-600 mb-1 block">Mã viết tắt *</label>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">{t('Mã viết tắt *', 'Short code *')}</label>
               <input
                 value={id}
                 onChange={e => setId(e.target.value.toUpperCase().slice(0, 4))}
-                placeholder="VD: NT"
+                placeholder={t('VD: NT', 'e.g. NT')}
                 className={`w-full border rounded-lg px-2.5 py-1.5 text-sm font-mono uppercase focus:outline-none focus:ring-2 ${
                   idError ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-emerald-200'
                 }`}
@@ -73,34 +75,36 @@ export const AddLocationDialog: React.FC<AddLocationDialogProps> = ({
               {idError && <div className="text-[10px] text-red-500 mt-0.5">{idError}</div>}
             </div>
             <div className="flex-1">
-              <label className="text-xs font-semibold text-slate-600 mb-1 block">Tên đầy đủ *</label>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">{t('Tên đầy đủ *', 'Full name *')}</label>
               <input
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
-                placeholder="Nhà Thờ Đức Bà"
+                placeholder={t('Nhà Thờ Đức Bà', 'Notre-Dame Cathedral')}
                 className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
               />
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600 mb-1 block">Danh mục</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">{t('Danh mục', 'Category')}</label>
             <select
               value={category}
               onChange={e => setCategory(e.target.value as LocationCategory)}
               className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
             >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {CATEGORIES.map(c => (
+                <option key={c} value={c}>{lang === 'en' ? (CATEGORY_EN[c] ?? c) : c}</option>
+              ))}
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600 mb-1 block">Mô tả (tùy chọn)</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">{t('Mô tả (tùy chọn)', 'Description (optional)')}</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={2}
-              placeholder="Mô tả ngắn về địa điểm..."
+              placeholder={t('Mô tả ngắn về địa điểm...', 'Brief description of the location...')}
               className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-200"
             />
           </div>
@@ -112,7 +116,7 @@ export const AddLocationDialog: React.FC<AddLocationDialogProps> = ({
             onClick={onCancel}
             className="flex-1 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"
           >
-            Hủy
+            {t('Hủy', 'Cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -121,7 +125,7 @@ export const AddLocationDialog: React.FC<AddLocationDialogProps> = ({
               canSubmit ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 cursor-not-allowed'
             }`}
           >
-            Thêm Địa Điểm
+            {t('Thêm Địa Điểm', 'Add Location')}
           </button>
         </div>
       </div>

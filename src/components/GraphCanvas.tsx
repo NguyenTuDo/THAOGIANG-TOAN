@@ -7,6 +7,7 @@ import {
   AlgorithmStep, SelectedElement,
 } from '../types';
 import { CATEGORY_COLORS, getNodeColor, getEdgeColor } from '../lib/graphColors';
+import { useLang } from '../contexts/LanguageContext';
 
 interface DistancePopup {
   fromId: string;
@@ -70,6 +71,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   selectedElement, onLocationClick, onLocationDrag, onCanvasDoubleClick,
   onRouteClick, onSelectElement, edgeStart, onEdgeStartSet, onAddRoute,
 }) => {
+  const { t } = useLang();
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; loc: TouristLocation } | null>(null);
@@ -587,7 +589,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             type="button"
             onClick={() => zoomBy(1.2)}
             className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50"
-            title="Phóng to"
+            title={t('Phóng to', 'Zoom in')}
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -595,7 +597,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             type="button"
             onClick={() => zoomBy(1 / 1.2)}
             className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50"
-            title="Thu nhỏ"
+            title={t('Thu nhỏ', 'Zoom out')}
           >
             <Minus className="h-4 w-4" />
           </button>
@@ -603,7 +605,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             type="button"
             onClick={() => fitToView(locations)}
             className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50"
-            title="Vừa khung nhìn"
+            title={t('Vừa khung nhìn', 'Fit view')}
           >
             <Search className="h-4 w-4" />
           </button>
@@ -611,7 +613,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             type="button"
             onClick={resetViewport}
             className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50"
-            title="Đặt lại"
+            title={t('Đặt lại', 'Reset')}
           >
             <RotateCcw className="h-4 w-4" />
           </button>

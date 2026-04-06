@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLang } from '../contexts/LanguageContext';
 
 export function AuthPanel() {
   const { profile, isAuthenticated, isBackendEnabled, loading, signIn, signOut, switchDemoRole } = useAuth();
+  const { t } = useLang();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -17,7 +19,7 @@ export function AuthPanel() {
       await signIn(email, password);
       setPassword('');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Đăng nhập thất bại.');
+      setMessage(error instanceof Error ? error.message : t('Đăng nhập thất bại.', 'Login failed.'));
     } finally {
       setSubmitting(false);
     }
@@ -26,7 +28,7 @@ export function AuthPanel() {
   if (loading) {
     return (
       <div className="rounded-[28px] border border-[#ded5c7] bg-white/90 p-5 text-sm text-slate-600">
-        Đang kiểm tra phiên đăng nhập...
+        {t('Đang kiểm tra phiên đăng nhập...', 'Checking session...')}
       </div>
     );
   }
@@ -35,9 +37,11 @@ export function AuthPanel() {
     <div className="rounded-[28px] border border-[#ded5c7] bg-white/92 p-5 shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Khu quản trị</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">{t('Khu quản trị', 'Admin area')}</div>
           <div className="mt-2 text-xl font-black text-slate-900">
-            {isAuthenticated ? `Đang đăng nhập: ${profile.displayName}` : 'Đăng nhập để vào phần chỉnh dữ liệu'}
+            {isAuthenticated
+              ? t(`Đang đăng nhập: ${profile.displayName}`, `Signed in as ${profile.displayName}`)
+              : t('Đăng nhập để vào phần chỉnh dữ liệu', 'Sign in to edit data')}
           </div>
         </div>
         <div className={`rounded-full px-3 py-1 text-xs font-bold ${
@@ -50,7 +54,15 @@ export function AuthPanel() {
       <div className="mt-4 grid gap-3 text-sm text-slate-600">
         <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
           <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          Khách xem không cần tài khoản. Chỉ email admin đã cấu hình, hoặc tài khoản có User Metadata <code>{'{"role":"admin"}'}</code>, đăng nhập tại <code>/admin</code> mới dùng để thêm, sửa, xóa dữ liệu.
+          {t(
+            'Khách xem không cần tài khoản. Chỉ email admin đã cấu hình, hoặc tài khoản có User Metadata ',
+            'Guests need no account. Only a configured admin email, or an account with User Metadata ',
+          )}
+          <code>{'{"role":"admin"}'}</code>
+          {t(
+            ', đăng nhập tại /admin mới dùng để thêm, sửa, xóa dữ liệu.',
+            ', signed in at /admin, can add, edit, or delete data.',
+          )}
         </div>
       </div>
 
@@ -67,7 +79,7 @@ export function AuthPanel() {
             />
           </label>
           <label className="block">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Mật khẩu</div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t('Mật khẩu', 'Password')}</div>
             <input
               value={password}
               onChange={event => setPassword(event.target.value)}
@@ -85,7 +97,7 @@ export function AuthPanel() {
                 className="inline-flex items-center gap-2 rounded-full bg-[#14342b] px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
               >
                 <KeyRound className="h-4 w-4" />
-                {submitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                {submitting ? t('Đang đăng nhập...', 'Signing in...') : t('Đăng nhập', 'Sign in')}
               </button>
             ) : (
               <button
@@ -94,7 +106,7 @@ export function AuthPanel() {
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700"
               >
                 <LockKeyhole className="h-4 w-4" />
-                Đăng xuất
+                {t('Đăng xuất', 'Sign out')}
               </button>
             )}
           </div>
@@ -102,21 +114,21 @@ export function AuthPanel() {
       ) : (
         <div className="mt-5 space-y-3">
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-            Chưa có biến môi trường Supabase. App đang ở chế độ demo để kiểm tra giao diện quản trị.
+            {t('Chưa có biến môi trường Supabase. App đang ở chế độ demo để kiểm tra giao diện quản trị.', 'No Supabase environment variables set. App is running in demo mode for UI testing.')}
           </div>
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => switchDemoRole()}
               className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-bold text-white"
             >
-              Vào vai Admin
+              {t('Vào vai Admin', 'Switch to Admin')}
             </button>
             {isAuthenticated && (
               <button
                 onClick={() => void signOut()}
                 className="rounded-full border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700"
               >
-                Thoát demo
+                {t('Thoát demo', 'Exit demo')}
               </button>
             )}
           </div>
