@@ -128,7 +128,7 @@ function evaluatePreviewPath(
   return {
     totalDistanceKm,
     valid: true,
-    note: t(`Có thể chạy thử theo lộ trình này với tổng ${totalDistanceKm.toFixed(1)} km.`, `Trial route covers ${totalDistanceKm.toFixed(1)} km.`),
+    note: t(`Có thể chạy thử theo lộ trình này với tổng ${totalDistanceKm.toFixed(1)} km (${(totalDistanceKm * 0.621371).toFixed(1)} mi).`, `Trial route covers ${totalDistanceKm.toFixed(1)} km (${(totalDistanceKm * 0.621371).toFixed(1)} mi).`),
   };
 }
 
@@ -552,7 +552,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                   <div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div>
                 </div>
                 <div className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${item.valid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {item.valid ? (item.totalDistanceKm !== null ? `${item.totalDistanceKm.toFixed(1)} km` : t('Hợp lệ', 'Valid')) : t('Thiếu cạnh', 'Missing edge')}
+                  {item.valid ? (item.totalDistanceKm !== null ? `${item.totalDistanceKm.toFixed(1)} km · ${(item.totalDistanceKm * 0.621371).toFixed(1)} mi` : t('Hợp lệ', 'Valid')) : t('Thiếu cạnh', 'Missing edge')}
                 </div>
               </div>
               <div className="mt-2 text-[11px] font-semibold text-slate-700">

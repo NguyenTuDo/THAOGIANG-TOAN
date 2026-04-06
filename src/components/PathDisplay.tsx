@@ -72,6 +72,7 @@ export const PathDisplay: React.FC<PathDisplayProps> = ({ path, totalKm, locatio
         <div className="text-right">
           <div className={`text-[11px] font-bold uppercase tracking-[0.18em] ${c.subtext}`}>Tổng quãng đường</div>
           <div className={`mt-1 text-3xl font-black leading-none ${c.text}`}>{totalKm.toFixed(1)} km</div>
+          <div className={`mt-0.5 text-xs font-semibold ${c.subtext} opacity-70`}>{(totalKm * 0.621371).toFixed(1)} mi</div>
         </div>
       </div>
 

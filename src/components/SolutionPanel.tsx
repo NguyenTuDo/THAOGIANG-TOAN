@@ -130,8 +130,9 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
   };
 
   const getName = (id: string) => locations.find(l => l.id === id)?.fullName ?? id;
+  const KM_TO_MI = 0.621371;
   const formatDistance = (distanceKm: number | null) => (
-    distanceKm === null ? '∞' : `${distanceKm.toFixed(1)} km`
+    distanceKm === null ? '∞' : `${distanceKm.toFixed(1)} km (${(distanceKm * KM_TO_MI).toFixed(1)} mi)`
   );
 
   if (!result) {
@@ -266,7 +267,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                   {appMode === 'cycle' ? t('Chu trình tối ưu — phương án đại diện', 'Optimal cycle — representative') : appMode === 'subset' ? t('Đường đi ngắn nhất', 'Shortest path') : t('Đường đi tối ưu', 'Optimal path')}
                 </div>
                 <div className="text-xs font-black text-emerald-700">
-                  {result.totalDistanceKm.toFixed(1)} km
+                  {result.totalDistanceKm.toFixed(1)} km · {(result.totalDistanceKm * KM_TO_MI).toFixed(1)} mi
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -304,7 +305,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                         {t('Tổng cộng', 'Total')}
                       </td>
                       <td className="px-2 py-2 text-right text-sm font-black text-emerald-800">
-                        {result.totalDistanceKm.toFixed(1)} km
+                        {result.totalDistanceKm.toFixed(1)} km · {(result.totalDistanceKm * KM_TO_MI).toFixed(1)} mi
                       </td>
                     </tr>
                   </tfoot>
@@ -414,7 +415,7 @@ export const SolutionPanel: React.FC<SolutionPanelProps> = ({
                             TH {index + 2}
                           </span>
                           <span className="text-base font-black text-slate-900">
-                            {variant.weight.toFixed(1)} km
+                            {variant.weight.toFixed(1)} km · {(variant.weight * KM_TO_MI).toFixed(1)} mi
                           </span>
                         </div>
                       </div>
