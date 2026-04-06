@@ -1039,16 +1039,7 @@ export const MapCanvas: React.FC<GraphCanvasProps> = ({
                 }}
               >
                 <Tooltip direction="top" offset={[0, -18]} className="map-node-tooltip">
-                  <div className="space-y-1.5">
-                    <div className="text-sm font-bold text-slate-900">{t(location.fullName, location.fullNameEn)}</div>
-                    <div className="text-[11px] font-semibold text-slate-500">{lang === 'en' ? (CATEGORY_EN[location.category] ?? location.category) : location.category}</div>
-                    <div className="max-w-[220px] text-xs leading-5 text-slate-600">
-                      {t(location.shortIntro ?? location.description ?? '', location.shortIntroEn ?? location.descriptionEn)}
-                    </div>
-                    {location.visitDuration && (
-                      <div className="text-[11px] text-slate-400">{t('Gợi ý thời lượng', 'Suggested visit')}: {location.visitDuration}</div>
-                    )}
-                  </div>
+                  <div className="text-sm font-bold text-slate-900">{t(location.fullName, location.fullNameEn)}</div>
                 </Tooltip>
               </Marker>
 
