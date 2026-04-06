@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, Expand, Hand, MapPinned
 import { findShortestHamiltonianCycle } from '../algorithms/hamiltonianCycle';
 import { findShortestHamiltonianPath } from '../algorithms/hamiltonianPath';
 import { findShortestSubsetRoute } from '../algorithms/subsetRoute';
+import { filterRoutesForSelection, getCompatibleRouteIds, getPresetRouteIds, normalizeSelectedRouteIds } from '../lib/presetRoutes';
 import { MapCanvas } from './MapCanvas';
 import { PathDisplay } from './PathDisplay';
 import { AlgorithmResult, AlgorithmStep, AppMode, GraphData, PresetSelectionMap, SelectedElement, TouristLocation } from '../types';
@@ -105,6 +106,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
   const [displayLayoutMode, setDisplayLayoutMode] = useState<'geo' | 'polygon'>('polygon');
   const [polygonVertexOrders, setPolygonVertexOrders] = useState<Record<AppMode, string[]>>({ cycle: [], path: [], subset: [] });
   const [selectedIds, setSelectedIds] = useState<string[]>(() => getPresetSelection(presets, 'cycle'));
+  const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>(() => getPresetRouteIds(presets.cycle, graphData.routes, getPresetSelection(presets, 'cycle')));
   const [startId, setStartId] = useState<string>(() => getPresetSelection(presets, 'cycle')[0] ?? '');
   const [endId, setEndId] = useState<string | null>(() => {
     const initial = getPresetSelection(presets, 'path');
@@ -128,8 +130,8 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
     [graphData.locations, selectedIds],
   );
   const availableRoutes = useMemo(
-    () => graphData.routes.filter(route => selectedIds.includes(route.from) && selectedIds.includes(route.to)),
-    [graphData.routes, selectedIds],
+    () => filterRoutesForSelection(graphData.routes, selectedIds, selectedRouteIds),
+    [graphData.routes, selectedIds, selectedRouteIds],
   );
   const activePath = useMemo(() => {
     if (!result?.found) return [];
@@ -263,14 +265,19 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
   useEffect(() => {
     const presetIds = getPresetSelection(presets, mode).filter(id => graphData.locations.some(location => location.id === id));
     setSelectedIds(presetIds);
+    setSelectedRouteIds(getPresetRouteIds(presets[mode], graphData.routes, presetIds));
     setStartId(presetIds[0] ?? '');
     setEndId(getPresetEndId(presets, mode, presetIds));
     setResult(null);
-  }, [graphData.locations, mode, presets]);
+  }, [graphData.locations, graphData.routes, mode, presets]);
 
   useEffect(() => {
     setSelectedIds(current => current.filter(id => graphData.locations.some(location => location.id === id)));
   }, [graphData.locations]);
+
+  useEffect(() => {
+    setSelectedRouteIds(current => normalizeSelectedRouteIds(current, graphData.routes, selectedIds));
+  }, [graphData.routes, selectedIds]);
 
   useEffect(() => {
     if (selectedIds.length === 0) {
@@ -438,22 +445,31 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
 
   const handleToggleLocation = useCallback((locationId: string) => {
     setSelectedIds(current => {
-      if (current.includes(locationId)) return current.filter(id => id !== locationId);
-      if (current.length >= Math.min(limit.max, graphData.locations.length)) return current;
-      return [...current, locationId];
+      let next: string[];
+      if (current.includes(locationId)) {
+        next = current.filter(id => id !== locationId);
+      } else if (current.length >= Math.min(limit.max, graphData.locations.length)) {
+        next = current;
+      } else {
+        next = [...current, locationId];
+      }
+      setSelectedRouteIds(getCompatibleRouteIds(graphData.routes, next));
+      return next;
     });
-  }, [graphData.locations.length, limit.max]);
+  }, [graphData.locations.length, graphData.routes, limit.max]);
 
   const handleLoadPreset = useCallback(() => {
     const presetIds = getPresetSelection(presets, mode).filter(id => graphData.locations.some(location => location.id === id));
     setSelectedIds(presetIds);
+    setSelectedRouteIds(getPresetRouteIds(presets[mode], graphData.routes, presetIds));
     setStartId(presetIds[0] ?? '');
     setEndId(getPresetEndId(presets, mode, presetIds));
     setResult(null);
-  }, [graphData.locations, mode, presets]);
+  }, [graphData.locations, graphData.routes, mode, presets]);
 
   const handleReset = useCallback(() => {
     setSelectedIds([]);
+    setSelectedRouteIds([]);
     setStartId('');
     setEndId(null);
     setResult(null);
@@ -462,7 +478,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
   const handleRun = useCallback(() => {
     const normalizedIds = selectedIds.filter(id => graphData.locations.some(location => location.id === id));
     const subsetLocations = graphData.locations.filter(location => normalizedIds.includes(location.id));
-    const subsetRoutes = graphData.routes.filter(route => normalizedIds.includes(route.from) && normalizedIds.includes(route.to));
+    const subsetRoutes = filterRoutesForSelection(graphData.routes, normalizedIds, selectedRouteIds);
 
     if (mode === 'cycle') {
       if (normalizedIds.length < PREVIEW_LIMITS.cycle.min || !startId) return;
@@ -478,7 +494,7 @@ export function AdminAlgorithmWorkbench({ graphData, presets }: AdminAlgorithmWo
 
     if (normalizedIds.length < PREVIEW_LIMITS.subset.min || !startId || !endId) return;
     setResult(findShortestSubsetRoute(subsetLocations, subsetRoutes, startId, endId));
-  }, [endId, graphData.locations, graphData.routes, mode, selectedIds, startId]);
+  }, [endId, graphData.locations, graphData.routes, mode, selectedIds, selectedRouteIds, startId]);
 
   const handleOpenPresentation = useCallback(() => {
     resetPresentationState();

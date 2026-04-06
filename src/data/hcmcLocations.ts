@@ -274,6 +274,7 @@ export const INITIAL_GRAPH_DATA: GraphData = {
 export const PRESET_SELECTIONS: PresetSelectionMap = {
   cycle: {
     ids: ['BT', 'NT', 'BM', 'DT', 'PD'],
+    routeIds: [routeId('BT', 'NT'), routeId('NT', 'BM'), routeId('BM', 'DT'), routeId('DT', 'PD'), routeId('BT', 'PD')],
     label: 'Di sản quanh trường',
     desc: 'Marie Curie → Hồ Con Rùa → Bảo tàng → Dinh Thống Nhất → Nhà Văn Hóa Thanh Niên',
     startId: 'BT',
@@ -281,6 +282,7 @@ export const PRESET_SELECTIONS: PresetSelectionMap = {
   },
   path: {
     ids: ['BT', 'NT', 'TD', 'DT', 'BM'],
+    routeIds: [routeId('BT', 'NT'), routeId('NT', 'TD'), routeId('TD', 'DT'), routeId('DT', 'BM')],
     label: 'Từ cổng trường đến bảo tàng',
     desc: 'Marie Curie → Hồ Con Rùa → Tao Đàn → Dinh Thống Nhất → Bảo tàng',
     startId: 'BT',
@@ -288,6 +290,7 @@ export const PRESET_SELECTIONS: PresetSelectionMap = {
   },
   subset: {
     ids: ['BT', 'NT', 'BM', 'DT', 'TD', 'L8', 'NB'],
+    routeIds: [routeId('BT', 'NT'), routeId('BT', 'TD'), routeId('NT', 'BM'), routeId('NT', 'TD'), routeId('NT', 'L8'), routeId('BM', 'DT'), routeId('BM', 'TD'), routeId('BM', 'L8'), routeId('DT', 'TD'), routeId('L8', 'NB')],
     label: 'Tập điểm trung tâm để tìm đường ngắn nhất',
     desc: 'Chỉ tìm đường đi ngắn nhất bên trong tập điểm đã chọn quanh trường và quận 1',
     startId: 'BT',

@@ -6,6 +6,7 @@ import { findShortestHamiltonianCycle } from '../algorithms/hamiltonianCycle';
 import { findShortestHamiltonianPath } from '../algorithms/hamiltonianPath';
 import { findShortestSubsetRoute } from '../algorithms/subsetRoute';
 import { loadGraphData, loadPresets, readLocalDraft, TOURIST_DATA_CHANGED_EVENT, writeLocalDraft } from '../lib/dataStore';
+import { filterRoutesForSelection, getCompatibleRouteIds, getPresetRouteIds, normalizeSelectedRouteIds } from '../lib/presetRoutes';
 import { useLang } from '../contexts/LanguageContext';
 import { AppMode, AlgorithmResult, GraphData, PresetSelectionMap } from '../types';
 
@@ -46,17 +47,19 @@ type AppView = 'selector' | 'preview' | 'result';
 
 export function GuidebookPage() {
   const { lang, setLang, t } = useLang();
+  const initialDraft = readLocalDraft();
   const [graphData, setGraphData] = useState<GraphData>({ locations: [], routes: [] });
   const [presets, setPresets] = useState<PresetSelectionMap>({
-    cycle:  { ids: [], label: '', desc: '' },
-    path:   { ids: [], label: '', desc: '' },
-    subset: { ids: [], label: '', desc: '' },
+    cycle:  { ids: [], routeIds: [], label: '', desc: '' },
+    path:   { ids: [], routeIds: [], label: '', desc: '' },
+    subset: { ids: [], routeIds: [], label: '', desc: '' },
   });
   const [loadingData, setLoadingData] = useState(true);
-  const [appMode, setAppMode] = useState<AppMode>(() => readLocalDraft()?.appMode ?? 'cycle');
+  const [appMode, setAppMode] = useState<AppMode>(() => initialDraft?.appMode ?? 'cycle');
   const [appView, setAppView] = useState<AppView>('selector');
-  const [selectedIds, setSelectedIds] = useState<string[]>(() => readLocalDraft()?.selectedIds ?? []);
-  const [endId, setEndId] = useState<string | null>(() => readLocalDraft()?.endId ?? null);
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => initialDraft?.selectedIds ?? []);
+  const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>(() => initialDraft?.selectedRouteIds ?? []);
+  const [endId, setEndId] = useState<string | null>(() => initialDraft?.endId ?? null);
   const [result, setResult] = useState<AlgorithmResult | null>(null);
   const isMountRef = useRef(true);
 
@@ -99,14 +102,15 @@ export function GuidebookPage() {
       return;
     }
     setSelectedIds([]);
+    setSelectedRouteIds([]);
     setEndId(null);
     setResult(null);
     setAppView('selector');
   }, [appMode]);
 
   useEffect(() => {
-    writeLocalDraft({ selectedIds, endId, appMode });
-  }, [selectedIds, endId, appMode]);
+    writeLocalDraft({ selectedIds, selectedRouteIds, endId, appMode });
+  }, [selectedIds, selectedRouteIds, endId, appMode]);
 
   // Cleanup: filter out any selected IDs that no longer exist in the system
   useEffect(() => {
@@ -117,6 +121,16 @@ export function GuidebookPage() {
       });
     }
   }, [graphData.locations]);
+
+  useEffect(() => {
+    setSelectedRouteIds(current => normalizeSelectedRouteIds(current, graphData.routes, selectedIds));
+  }, [graphData.routes, selectedIds]);
+
+  useEffect(() => {
+    if (initialDraft?.selectedRouteIds !== undefined) return;
+    if (selectedIds.length === 0 || selectedRouteIds.length > 0 || graphData.routes.length === 0) return;
+    setSelectedRouteIds(getCompatibleRouteIds(graphData.routes, selectedIds));
+  }, [graphData.routes, initialDraft?.selectedRouteIds, selectedIds, selectedRouteIds.length]);
 
   const MAX: Record<AppMode, number> = { cycle: 5, path: 5, subset: Number.MAX_SAFE_INTEGER };
 
@@ -150,18 +164,23 @@ export function GuidebookPage() {
 
   const handleToggle = useCallback((id: string) => {
     setSelectedIds(prev => {
+      let next: string[];
       if (prev.includes(id)) {
-        const next = prev.filter(x => x !== id);
+        next = prev.filter(x => x !== id);
         if (appMode !== 'cycle' && id === endId) setEndId(null);
-        return next;
+      } else if (prev.length >= MAX[appMode]) {
+        next = prev;
+      } else {
+        next = [...prev, id];
       }
-      if (prev.length >= MAX[appMode]) return prev;
-      return [...prev, id];
+      setSelectedRouteIds(getCompatibleRouteIds(graphData.routes, next));
+      return next;
     });
-  }, [appMode, endId]);
+  }, [appMode, endId, graphData.routes]);
 
   const handleClearAll = useCallback(() => {
     setSelectedIds([]);
+    setSelectedRouteIds([]);
     setEndId(null);
     setResult(null);
     setAppView('selector');
@@ -181,17 +200,16 @@ export function GuidebookPage() {
         : ordered.find(id => id !== startId) ?? null;
 
     setSelectedIds(ordered);
+    setSelectedRouteIds(getPresetRouteIds(preset, graphData.routes, ordered));
     setEndId(nextEndId);
-  }, [appMode, graphData.locations, presets]);
+  }, [appMode, graphData.locations, graphData.routes, presets]);
 
   const buildResult = useCallback((nextSelectedIds: string[], nextEndId: string | null) => {
     if (nextSelectedIds.length === 0) return null;
 
     const startId = nextSelectedIds[0];
     const subsetLocs = graphData.locations.filter(l => nextSelectedIds.includes(l.id));
-    const subsetRoutes = graphData.routes.filter(
-      r => nextSelectedIds.includes(r.from) && nextSelectedIds.includes(r.to),
-    );
+    const subsetRoutes = filterRoutesForSelection(graphData.routes, nextSelectedIds, selectedRouteIds);
 
     if (appMode === 'cycle') {
       return findShortestHamiltonianCycle(subsetLocs, subsetRoutes, startId);
@@ -202,7 +220,7 @@ export function GuidebookPage() {
     }
     if (!nextEndId) return null;
     return findShortestSubsetRoute(subsetLocs, subsetRoutes, startId, nextEndId);
-  }, [appMode, graphData.locations, graphData.routes]);
+  }, [appMode, graphData.locations, graphData.routes, selectedRouteIds]);
 
   const canPreviewSelection = useCallback((nextSelectedIds: string[], nextEndId: string | null) => {
     if (appMode === 'cycle') {
@@ -230,11 +248,12 @@ export function GuidebookPage() {
         : ordered.find(id => id !== startId) ?? null;
 
     setSelectedIds(ordered);
+    setSelectedRouteIds(getPresetRouteIds(preset, graphData.routes, ordered));
     setEndId(nextEndId);
 
     setResult(null);
     setAppView(canPreviewSelection(ordered, nextEndId) ? 'preview' : 'selector');
-  }, [appMode, canPreviewSelection, graphData.locations, presets]);
+  }, [appMode, canPreviewSelection, graphData.locations, graphData.routes, presets]);
 
   const handleFindRoute = useCallback(() => {
     if (!canPreviewSelection(selectedIds, endId)) return;
@@ -256,8 +275,8 @@ export function GuidebookPage() {
     [graphData.locations, selectedIds],
   );
   const subsetRoutes = useMemo(
-    () => graphData.routes.filter(r => selectedIds.includes(r.from) && selectedIds.includes(r.to)),
-    [graphData.routes, selectedIds],
+    () => filterRoutesForSelection(graphData.routes, selectedIds, selectedRouteIds),
+    [graphData.routes, selectedIds, selectedRouteIds],
   );
   const currentStageLabel = appView === 'selector'
     ? t('Bước 1 - Chọn bài toán và điểm dừng', 'Step 1 - Choose the mode and stops')

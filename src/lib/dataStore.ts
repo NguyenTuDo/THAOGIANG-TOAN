@@ -15,9 +15,9 @@ const EMPTY_GRAPH: GraphData = { locations: [], routes: [] };
 
 function createEmptyPresets(): PresetSelectionMap {
   return {
-    cycle: { ids: [], label: '', desc: '', startId: null, endId: null },
-    path: { ids: [], label: '', desc: '', startId: null, endId: null },
-    subset: { ids: [], label: '', desc: '', startId: null, endId: null },
+    cycle: { ids: [], routeIds: [], label: '', desc: '', startId: null, endId: null },
+    path: { ids: [], routeIds: [], label: '', desc: '', startId: null, endId: null },
+    subset: { ids: [], routeIds: [], label: '', desc: '', startId: null, endId: null },
   };
 }
 
@@ -25,6 +25,9 @@ const EMPTY_PRESETS: PresetSelectionMap = createEmptyPresets();
 
 function normalizePresetSelection(mode: AppMode, preset?: Partial<PresetSelection> | null): PresetSelection {
   const ids = Array.isArray(preset?.ids) ? preset.ids.filter((id): id is string => typeof id === 'string') : [];
+  const routeIds = Array.isArray(preset?.routeIds)
+    ? Array.from(new Set(preset.routeIds.filter((id): id is string => typeof id === 'string'))).sort((a, b) => a.localeCompare(b))
+    : [];
   const requestedStartId = typeof preset?.startId === 'string' && ids.includes(preset.startId) ? preset.startId : null;
   const startId = requestedStartId ?? ids[0] ?? null;
   const requestedEndId = typeof preset?.endId === 'string' && ids.includes(preset.endId) ? preset.endId : null;
@@ -36,6 +39,7 @@ function normalizePresetSelection(mode: AppMode, preset?: Partial<PresetSelectio
 
   return {
     ids,
+    routeIds,
     label: typeof preset?.label === 'string' ? preset.label : '',
     desc: typeof preset?.desc === 'string' ? preset.desc : '',
     startId,
@@ -252,10 +256,11 @@ export async function loadPresets(): Promise<PresetSelectionMap> {
 
     const presets: PresetSelectionMap = createEmptyPresets();
     if (data && data.length > 0) {
-      (data as Array<{ mode: AppMode; ids: string[]; label: string; desc: string; startId?: string | null; endId?: string | null }>).forEach(row => {
+      (data as Array<{ mode: AppMode; ids: string[]; routeIds?: string[]; label: string; desc: string; startId?: string | null; endId?: string | null }>).forEach(row => {
         presets[row.mode] = normalizePresetSelection(row.mode, {
           ...localPresets[row.mode],
           ids: row.ids,
+          routeIds: row.routeIds ?? localPresets[row.mode]?.routeIds ?? [],
           label: row.label,
           desc: row.desc,
           startId: row.startId ?? localPresets[row.mode]?.startId ?? null,
@@ -291,7 +296,7 @@ export async function savePreset(mode: AppMode, preset: PresetSelectionMap[AppMo
   const { error } = await supabase.from('preset_selections').upsert(payload);
   if (!error) return;
 
-  if (error.message.includes('startId') || error.message.includes('endId')) {
+  if (error.message.includes('startId') || error.message.includes('endId') || error.message.includes('routeIds')) {
     const { error: fallbackError } = await supabase.from('preset_selections').upsert({
       mode,
       ids: next[mode].ids,
@@ -307,6 +312,7 @@ export async function savePreset(mode: AppMode, preset: PresetSelectionMap[AppMo
 
 export interface GuidebookDraft {
   selectedIds: string[];
+  selectedRouteIds?: string[];
   endId: string | null;
   appMode: AppMode;
 }

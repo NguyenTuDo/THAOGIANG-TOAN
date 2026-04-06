@@ -80,7 +80,7 @@ export function AdminPage() {
     await refreshData();
   }, [refreshData]);
 
-  const handleSavePreset = useCallback(async (mode: AppMode, presetConfig: Pick<PresetSelection, 'ids' | 'startId' | 'endId'>) => {
+  const handleSavePreset = useCallback(async (mode: AppMode, presetConfig: Pick<PresetSelection, 'ids' | 'routeIds' | 'startId' | 'endId'>) => {
     const orderedIds = presetConfig.startId && presetConfig.ids.includes(presetConfig.startId)
       ? [presetConfig.startId, ...presetConfig.ids.filter(id => id !== presetConfig.startId)]
       : [...presetConfig.ids];
@@ -95,7 +95,7 @@ export function AdminPage() {
       : presetConfig.endId && orderedIds.includes(presetConfig.endId) && presetConfig.endId !== startId
         ? presetConfig.endId
         : orderedIds.find(id => id !== startId) ?? null;
-    await savePreset(mode, { ids: orderedIds, label, desc, startId, endId });
+    await savePreset(mode, { ids: orderedIds, routeIds: presetConfig.routeIds ?? [], label, desc, startId, endId });
     await refreshData();
   }, [graphData.locations, presets, refreshData]);
 

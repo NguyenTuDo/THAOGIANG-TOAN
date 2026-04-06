@@ -51,6 +51,7 @@ export interface GraphData {
 
 export interface PresetSelection {
   ids: string[];
+  routeIds?: string[];
   label: string;
   desc: string;
   startId?: string | null;

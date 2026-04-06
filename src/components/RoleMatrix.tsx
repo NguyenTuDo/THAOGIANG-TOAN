@@ -4,7 +4,7 @@ import { useRolePermissions } from '../contexts/AuthContext';
 const FEATURES = [
   { label: 'Xem danh sách điểm đến', guest: true, user: true, admin: true },
   { label: 'Chạy thuật toán tìm lộ trình', guest: false, user: true, admin: true },
-  { label: 'Dùng bộ 5 điểm cài sẵn', guest: false, user: true, admin: true },
+  { label: 'Dùng bộ điểm mẫu cài sẵn', guest: false, user: true, admin: true },
   { label: 'Mở giao diện admin', guest: false, user: false, admin: true },
   { label: 'Thêm, sửa, xóa địa điểm', guest: false, user: false, admin: true },
   { label: 'Quản lý khoảng cách cung đường', guest: false, user: false, admin: true },

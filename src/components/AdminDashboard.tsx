@@ -5,6 +5,7 @@ import { AppMode, GraphData, PresetSelection, PresetSelectionMap, Route, Selecte
 import { MapCanvas } from './MapCanvas';
 import { LocationCard } from './LocationCard';
 import { LocationDetailModal } from './LocationDetailModal';
+import { haversineKm } from '../lib/geo';
 import { projectGeoLocationsToCanvas, syncLocationsToProjectedCanvas } from '../lib/geoProjection';
 
 interface AdminDashboardProps {
@@ -15,7 +16,7 @@ interface AdminDashboardProps {
   onSaveLocationOrder: (locationIds: string[]) => Promise<void>;
   onSaveRoute: (route: Route) => Promise<void>;
   onDeleteRoute: (routeId: string) => Promise<void>;
-  onSavePreset: (mode: AppMode, preset: Pick<PresetSelection, 'ids' | 'startId' | 'endId'>) => Promise<void>;
+  onSavePreset: (mode: AppMode, preset: Pick<PresetSelection, 'ids' | 'routeIds' | 'startId' | 'endId'>) => Promise<void>;
   onSeedInitialData?: () => Promise<void>;
 }
 
@@ -87,6 +88,21 @@ function buildRouteId(from: string, to: string) {
   return [from, to].sort().join('__');
 }
 
+function estimateRouteDistanceKm(from: TouristLocation, to: TouristLocation) {
+  if (
+    typeof from.lat === 'number' &&
+    typeof from.lng === 'number' &&
+    typeof to.lat === 'number' &&
+    typeof to.lng === 'number'
+  ) {
+    return Math.max(0.1, Number(haversineKm(from.lat, from.lng, to.lat, to.lng).toFixed(1)));
+  }
+
+  const dx = from.x - to.x;
+  const dy = from.y - to.y;
+  return Math.max(0.1, Number((Math.sqrt(dx * dx + dy * dy) / 100).toFixed(1)));
+}
+
 export function AdminDashboard({
   graphData,
   presets,
@@ -106,6 +122,7 @@ export function AdminDashboard({
   const [status, setStatus] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'success' | 'error'>('success');
   const [saving, setSaving] = useState(false);
+  const [bulkAddingRoutes, setBulkAddingRoutes] = useState(false);
   const [savingPositions, setSavingPositions] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
@@ -298,6 +315,28 @@ export function AdminDashboard({
     [focusedLocationId, graphData.routes, hiddenLocationIdSet],
   );
   const hiddenRouteCount = graphData.routes.length - visibleRoutes.length;
+  const missingRoutes = useMemo(() => {
+    const existingIds = new Set(graphData.routes.map(route => route.id));
+    const nextRoutes: Route[] = [];
+
+    for (let index = 0; index < graphData.locations.length; index += 1) {
+      for (let nextIndex = index + 1; nextIndex < graphData.locations.length; nextIndex += 1) {
+        const fromLocation = graphData.locations[index];
+        const toLocation = graphData.locations[nextIndex];
+        const routeId = buildRouteId(fromLocation.id, toLocation.id);
+        if (existingIds.has(routeId)) continue;
+
+        nextRoutes.push({
+          id: routeId,
+          from: fromLocation.id,
+          to: toLocation.id,
+          distanceKm: estimateRouteDistanceKm(fromLocation, toLocation),
+        });
+      }
+    }
+
+    return nextRoutes;
+  }, [graphData.locations, graphData.routes]);
 
   const toggleLocationVisibility = useCallback((locationId: string) => {
     setFocusedLocationId(current => current === locationId ? null : current);
@@ -559,6 +598,26 @@ export function AdminDashboard({
       setSaving(false);
     }
   };
+
+  const handleAddMissingRoutes = useCallback(async () => {
+    if (missingRoutes.length === 0) {
+      showSuccess('Hiện không còn cạnh nào bị thiếu.');
+      return;
+    }
+
+    setBulkAddingRoutes(true);
+    setStatus(null);
+    try {
+      for (const route of missingRoutes) {
+        await onSaveRoute(route);
+      }
+      showSuccess(`Đã bổ sung ${missingRoutes.length} cạnh còn thiếu với trọng số ước lượng tự động.`);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setBulkAddingRoutes(false);
+    }
+  }, [missingRoutes, onSaveRoute]);
 
   // Instant visual update — persisted after a short idle delay to keep dragging smooth.
   // Wrapped in useCallback so GraphCanvas gets a stable prop reference and doesn't
@@ -1100,14 +1159,28 @@ export function AdminDashboard({
                 <div className="text-xl font-black text-slate-900">Danh sách cạnh / cung đường</div>
                 <div className="mt-1 text-sm text-slate-500">Đây là phần thầy dùng để thiết lập trọng số của đồ thị.</div>
               </div>
-              <button
-                type="button"
-                onClick={openNewRouteModal}
-                className="inline-flex items-center gap-2 rounded-full bg-[#133654] px-4 py-2 text-sm font-bold text-white"
-              >
-                <Plus className="h-4 w-4" />
-                Thêm cạnh
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={bulkAddingRoutes || missingRoutes.length === 0}
+                  onClick={() => void handleAddMissingRoutes()}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkAddingRoutes ? 'Đang bổ sung…' : `Bổ sung ${missingRoutes.length} cạnh thiếu`}
+                </button>
+                <button
+                  type="button"
+                  onClick={openNewRouteModal}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#133654] px-4 py-2 text-sm font-bold text-white"
+                >
+                  <Plus className="h-4 w-4" />
+                  Thêm cạnh
+                </button>
+              </div>
+            </div>
+            <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+              Hệ thống đang có <strong>{graphData.routes.length}</strong> cạnh. Còn thiếu <strong>{missingRoutes.length}</strong> cạnh nếu muốn phủ đủ mọi cặp đỉnh.
+              Nút bổ sung hàng loạt sẽ tự tạo các cạnh còn thiếu và tự điền trọng số theo tọa độ hiện có của từng địa điểm.
             </div>
 
             <div className="max-h-[220px] space-y-3 overflow-y-auto pr-1">
@@ -1186,7 +1259,7 @@ export function AdminDashboard({
           <div className="rounded-[30px] border border-[#ded5c7] bg-white/95 p-6">
             <div className="mb-4 text-xl font-black text-slate-900">Preset cho từng chế độ</div>
             <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-              Chọn nhanh bộ điểm mẫu cho từng bài toán. Với <code>Chu trình Hamilton</code> và <code>Đường đi Hamilton</code> nên giữ đúng 5 điểm.
+              Chọn nhanh bộ điểm mẫu cho từng bài toán. Với <code>Chu trình Hamilton</code> và <code>Đường đi Hamilton</code> nên giữ đúng 5 điểm; riêng <code>Đường đi ngắn nhất</code> có thể chọn linh hoạt.
             </div>
             <div className="space-y-4">
               {(Object.keys(MODE_LABELS) as AppMode[]).map(mode => (
@@ -1196,6 +1269,7 @@ export function AdminDashboard({
                   label={MODE_LABELS[mode]}
                   preset={presets[mode]}
                   locations={graphData.locations}
+                  routes={graphData.routes}
                   onSave={preset => onSavePreset(mode, preset)}
                 />
               ))}
@@ -1428,23 +1502,34 @@ function PresetEditor({
   label,
   preset,
   locations,
+  routes,
   onSave,
 }: {
   mode: AppMode;
   label: string;
   preset: PresetSelection;
   locations: TouristLocation[];
-  onSave: (preset: Pick<PresetSelection, 'ids' | 'startId' | 'endId'>) => Promise<void>;
+  routes: Route[];
+  onSave: (preset: Pick<PresetSelection, 'ids' | 'routeIds' | 'startId' | 'endId'>) => Promise<void>;
 }) {
   const allLocationIds = useMemo(() => locations.map(location => location.id), [locations]);
+  const compatibleRoutes = useMemo(
+    () => routes.filter(route => preset.ids.includes(route.from) && preset.ids.includes(route.to)),
+    [preset.ids, routes],
+  );
   const [draft, setDraft] = useState<string[]>(preset.ids);
+  const [routeDraft, setRouteDraft] = useState<string[]>(preset.routeIds ?? compatibleRoutes.map(route => route.id));
   const [startId, setStartId] = useState<string | null>(preset.startId ?? preset.ids[0] ?? null);
   const [endId, setEndId] = useState<string | null>(preset.endId ?? null);
   const [saving, setSaving] = useState(false);
 
   React.useEffect(() => {
     const validIds = preset.ids.filter(id => allLocationIds.includes(id));
+    const validRouteIds = routes
+      .filter(route => validIds.includes(route.from) && validIds.includes(route.to))
+      .map(route => route.id);
     setDraft(validIds);
+    setRouteDraft((preset.routeIds ?? validRouteIds).filter(routeId => validRouteIds.includes(routeId)));
     const nextStartId = preset.startId && validIds.includes(preset.startId)
       ? preset.startId
       : validIds[0] ?? null;
@@ -1456,7 +1541,7 @@ function PresetEditor({
           ? preset.endId
           : validIds.find(id => id !== nextStartId) ?? null,
     );
-  }, [allLocationIds, mode, preset]);
+  }, [allLocationIds, mode, preset, routes]);
 
   React.useEffect(() => {
     if (draft.length === 0) {
@@ -1482,6 +1567,16 @@ function PresetEditor({
     }
   }, [draft, endId, mode, startId]);
 
+  const availableRoutes = useMemo(
+    () => routes.filter(route => draft.includes(route.from) && draft.includes(route.to)),
+    [draft, routes],
+  );
+
+  React.useEffect(() => {
+    const availableRouteIds = new Set(availableRoutes.map(route => route.id));
+    setRouteDraft(current => current.filter(routeId => availableRouteIds.has(routeId)));
+  }, [availableRoutes]);
+
   const toggle = (id: string) => {
     setDraft(current => {
       if (current.includes(id)) {
@@ -1491,6 +1586,14 @@ function PresetEditor({
       if (current.length >= limit) return current;
       return [...current, id];
     });
+  };
+
+  const toggleRoute = (routeId: string) => {
+    setRouteDraft(current => (
+      current.includes(routeId)
+        ? current.filter(id => id !== routeId)
+        : [...current, routeId].sort((a, b) => a.localeCompare(b))
+    ));
   };
 
   return (
@@ -1539,13 +1642,38 @@ function PresetEditor({
       <div className="mt-3 text-xs text-slate-500">
         Đã chọn {draft.length} điểm. {mode === 'subset' ? 'Bài 3 có thể chọn tùy ý trong toàn bộ danh sách địa điểm hiện có.' : 'Nên giữ đúng 5 điểm.'}
       </div>
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Cạnh muốn dùng</div>
+        <div className="mt-2 text-xs leading-5 text-slate-500">
+          Chỉ các cạnh được chọn ở đây mới đi vào preset mẫu. Nếu bỏ bớt cạnh, hệ thống sẽ không tự lấy thêm các cạnh còn lại.
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {availableRoutes.length > 0 ? availableRoutes.map(route => (
+            <button
+              key={route.id}
+              type="button"
+              onClick={() => toggleRoute(route.id)}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                routeDraft.includes(route.id) ? 'bg-[#133654] text-white' : 'border border-slate-200 bg-white text-slate-700'
+              }`}
+            >
+              {route.from} ↔ {route.to}
+            </button>
+          )) : (
+            <div className="text-xs text-slate-500">Hãy chọn ít nhất 2 đỉnh để bắt đầu chọn cạnh.</div>
+          )}
+        </div>
+        <div className="mt-3 text-xs text-slate-500">
+          Đã chọn {routeDraft.length} cạnh trong preset này.
+        </div>
+      </div>
       <button
         type="button"
         disabled={saving || draft.length < (mode === 'subset' ? 2 : 5) || !startId || (mode !== 'cycle' && (!endId || endId === startId))}
         onClick={async () => {
           setSaving(true);
           try {
-            await onSave({ ids: draft, startId, endId: mode === 'cycle' ? null : endId });
+            await onSave({ ids: draft, routeIds: routeDraft, startId, endId: mode === 'cycle' ? null : endId });
           } finally {
             setSaving(false);
           }
