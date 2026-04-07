@@ -1,5 +1,4 @@
 import { AppMode, GraphData, PresetSelection, PresetSelectionMap, Route, TouristLocation } from '../types';
-import { getSupabase, hasSupabaseConfig } from './supabase';
 import { INITIAL_GRAPH_DATA, PRESET_SELECTIONS } from '../data/hcmcLocations';
 
 export const TOURIST_DATA_CHANGED_EVENT = 'tourist-data-changed';
@@ -20,8 +19,6 @@ function createEmptyPresets(): PresetSelectionMap {
     subset: { ids: [], routeIds: [], label: '', desc: '', startId: null, endId: null },
   };
 }
-
-const EMPTY_PRESETS: PresetSelectionMap = createEmptyPresets();
 
 function normalizePresetSelection(mode: AppMode, preset?: Partial<PresetSelection> | null): PresetSelection {
   const ids = Array.isArray(preset?.ids) ? preset.ids.filter((id): id is string => typeof id === 'string') : [];
@@ -85,7 +82,7 @@ function emitTouristDataChanged() {
   window.dispatchEvent(new CustomEvent(TOURIST_DATA_CHANGED_EVENT));
 }
 
-function readLocalGraphData(): GraphData {
+function readStoredGraphData(): GraphData {
   try {
     const rawLocations = localStorage.getItem(STORAGE_KEYS.locations);
     const rawRoutes = localStorage.getItem(STORAGE_KEYS.routes);
@@ -98,6 +95,18 @@ function readLocalGraphData(): GraphData {
   }
 }
 
+function getDefaultGraphData(): GraphData {
+  return normalizeGraphData(INITIAL_GRAPH_DATA);
+}
+
+function getEffectiveGraphData(): GraphData {
+  const stored = readStoredGraphData();
+  if (stored.locations.length > 0 || stored.routes.length > 0) {
+    return stored;
+  }
+  return getDefaultGraphData();
+}
+
 function writeLocalGraphData(graphData: GraphData, options?: { emitEvent?: boolean }) {
   const normalized = normalizeGraphData(graphData);
   localStorage.setItem(STORAGE_KEYS.locations, JSON.stringify(normalized.locations));
@@ -107,13 +116,29 @@ function writeLocalGraphData(graphData: GraphData, options?: { emitEvent?: boole
   }
 }
 
-function readLocalPresets(): PresetSelectionMap {
+function readStoredPresets(): PresetSelectionMap {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.presets);
     return raw ? normalizePresetMap(JSON.parse(raw) as PresetSelectionMap) : createEmptyPresets();
   } catch {
     return createEmptyPresets();
   }
+}
+
+function getDefaultPresets(): PresetSelectionMap {
+  return normalizePresetMap(PRESET_SELECTIONS);
+}
+
+function getEffectivePresets(): PresetSelectionMap {
+  const stored = readStoredPresets();
+  if (
+    stored.cycle.ids.length > 0 ||
+    stored.path.ids.length > 0 ||
+    stored.subset.ids.length > 0
+  ) {
+    return stored;
+  }
+  return getDefaultPresets();
 }
 
 function writeLocalPresets(presets: PresetSelectionMap, options?: { emitEvent?: boolean }) {
@@ -124,50 +149,11 @@ function writeLocalPresets(presets: PresetSelectionMap, options?: { emitEvent?: 
 }
 
 export async function loadGraphData(): Promise<GraphData> {
-  const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return readLocalGraphData();
-
-  try {
-    const [locResult, routeResult] = await Promise.all([
-      supabase.from('locations').select('*'),
-      supabase.from('routes').select('*'),
-    ]);
-
-    if (locResult.error || routeResult.error) {
-      throw new Error([
-        locResult.error?.message,
-        routeResult.error?.message,
-      ].filter(Boolean).join(' | ') || 'fetch failed');
-    }
-
-    const graphData = normalizeGraphData({
-      locations: (locResult.data as TouristLocation[]) ?? [],
-      routes: (routeResult.data as Route[]) ?? [],
-    });
-
-    writeLocalGraphData(graphData, { emitEvent: false });
-    return graphData;
-  } catch (error) {
-    console.error('loadGraphData failed:', error);
-    const localData = readLocalGraphData();
-    if (localData.locations.length > 0 || localData.routes.length > 0) {
-      return localData;
-    }
-    return normalizeGraphData(INITIAL_GRAPH_DATA);
-  }
-}
-
-// Strip undefined values so Supabase doesn't reject with 400
-function toDbLocation(location: TouristLocation): Record<string, unknown> {
-  const record: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(location)) {
-    if (value !== undefined) record[key] = value;
-  }
-  return record;
+  return getEffectiveGraphData();
 }
 
 export async function saveLocation(location: TouristLocation): Promise<void> {
-  const current = readLocalGraphData();
+  const current = getEffectiveGraphData();
   const existingLocation = current.locations.find(item => item.id === location.id);
   const normalizedLocation: TouristLocation = {
     ...location,
@@ -177,16 +163,10 @@ export async function saveLocation(location: TouristLocation): Promise<void> {
     ? current.locations.map(item => item.id === location.id ? normalizedLocation : item)
     : [...current.locations, normalizedLocation];
   writeLocalGraphData({ ...current, locations: nextLocations });
-
-  const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return;
-
-  const { error } = await supabase.from('locations').upsert(toDbLocation(normalizedLocation));
-  if (error) throw error;
 }
 
 export async function saveLocationOrder(locationIds: string[]): Promise<void> {
-  const current = readLocalGraphData();
+  const current = getEffectiveGraphData();
   const orderMap = new Map(locationIds.map((id, index) => [id, index]));
   const nextLocations = normalizeLocations(
     current.locations.map((location, index) => ({
@@ -196,118 +176,40 @@ export async function saveLocationOrder(locationIds: string[]): Promise<void> {
   );
 
   writeLocalGraphData({ ...current, locations: nextLocations });
-
-  const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return;
-
-  const { error } = await supabase.from('locations').upsert(nextLocations.map(location => toDbLocation(location)));
-  if (error) throw error;
 }
 
 export async function deleteLocation(locationId: string): Promise<void> {
-  const current = readLocalGraphData();
+  const current = getEffectiveGraphData();
   writeLocalGraphData({
     locations: current.locations.filter(item => item.id !== locationId),
     routes: current.routes.filter(route => route.from !== locationId && route.to !== locationId),
   });
-
-  const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return;
-
-  await supabase.from('routes').delete().or(`from.eq.${locationId},to.eq.${locationId}`);
-  await supabase.from('locations').delete().eq('id', locationId);
 }
 
 export async function saveRoute(route: Route): Promise<void> {
-  const current = readLocalGraphData();
+  const current = getEffectiveGraphData();
   const nextRoutes = current.routes.some(item => item.id === route.id)
     ? current.routes.map(item => item.id === route.id ? route : item)
     : [...current.routes, route];
   writeLocalGraphData({ ...current, routes: nextRoutes });
-
-  const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return;
-
-  const { error } = await supabase.from('routes').upsert(route);
-  if (error) throw error;
 }
 
 export async function deleteRoute(routeId: string): Promise<void> {
-  const current = readLocalGraphData();
+  const current = getEffectiveGraphData();
   writeLocalGraphData({
     ...current,
     routes: current.routes.filter(item => item.id !== routeId),
   });
-
-  const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return;
-
-  await supabase.from('routes').delete().eq('id', routeId);
 }
 
 export async function loadPresets(): Promise<PresetSelectionMap> {
-  const supabase = getSupabase();
-  const localPresets = readLocalPresets();
-  if (!supabase || !hasSupabaseConfig()) return localPresets;
-
-  try {
-    const { data, error } = await supabase.from('preset_selections').select('*');
-    if (error) throw error;
-
-    const presets: PresetSelectionMap = createEmptyPresets();
-    if (data && data.length > 0) {
-      (data as Array<{ mode: AppMode; ids: string[]; routeIds?: string[]; label: string; desc: string; startId?: string | null; endId?: string | null }>).forEach(row => {
-        presets[row.mode] = normalizePresetSelection(row.mode, {
-          ...localPresets[row.mode],
-          ids: row.ids,
-          routeIds: row.routeIds ?? localPresets[row.mode]?.routeIds ?? [],
-          label: row.label,
-          desc: row.desc,
-          startId: row.startId ?? localPresets[row.mode]?.startId ?? null,
-          endId: row.endId ?? localPresets[row.mode]?.endId ?? null,
-        });
-      });
-      writeLocalPresets(presets, { emitEvent: false });
-      return presets;
-    }
-    return localPresets;
-  } catch (error) {
-    console.error('loadPresets failed:', error);
-    if (
-      localPresets.cycle.ids.length > 0 ||
-      localPresets.path.ids.length > 0 ||
-      localPresets.subset.ids.length > 0
-    ) {
-      return localPresets;
-    }
-    return PRESET_SELECTIONS;
-  }
+  return getEffectivePresets();
 }
 
 export async function savePreset(mode: AppMode, preset: PresetSelectionMap[AppMode]): Promise<void> {
-  const current = readLocalPresets();
+  const current = getEffectivePresets();
   const next = { ...current, [mode]: normalizePresetSelection(mode, preset) };
   writeLocalPresets(next);
-
-  const supabase = getSupabase();
-  if (!supabase || !hasSupabaseConfig()) return;
-
-  const payload = { mode, ...next[mode] };
-  const { error } = await supabase.from('preset_selections').upsert(payload);
-  if (!error) return;
-
-  if (error.message.includes('startId') || error.message.includes('endId') || error.message.includes('routeIds')) {
-    const { error: fallbackError } = await supabase.from('preset_selections').upsert({
-      mode,
-      ids: next[mode].ids,
-      label: next[mode].label,
-      desc: next[mode].desc,
-    });
-    if (!fallbackError) return;
-    throw fallbackError;
-  }
-
-  throw error;
 }
 
 export interface GuidebookDraft {

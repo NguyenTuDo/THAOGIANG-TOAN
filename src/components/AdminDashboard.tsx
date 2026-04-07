@@ -245,7 +245,7 @@ export function AdminDashboard({
     };
   }, [highlightsDraft, highlightsEnDraft, locationForm]);
 
-  // Canvas locations = Supabase data + in-flight drag overrides + auto-spread if all at default
+  // Canvas locations = persisted data + in-flight drag overrides + auto-spread if all at default
   const canvasLocations = useMemo(() => {
     const locs = graphData.locations;
     if (locs.length <= 1) return locs;
@@ -460,23 +460,8 @@ export function AdminDashboard({
   };
 
   const showError = (error: unknown) => {
-    const rawMessage = error instanceof Error ? error.message : 'Không thể lưu dữ liệu.';
-    const missingColumnKeywords = [
-      'googleMapsUrl', 'fullNameEn', 'descriptionEn', 'shortIntroEn',
-      'neighborhoodEn', 'bestForEn', 'highlightsEn', 'displayOrder',
-    ];
-    const permissionKeywords = [
-      'row-level security',
-      'permission denied',
-      'new row violates row-level security policy',
-    ];
-    const friendlyMessage = missingColumnKeywords.some(col => rawMessage.includes(col))
-      ? 'Supabase đang thiếu cột. Vào SUPABASE_SETUP.md → Bước 2b và chạy SQL nâng cấp schema.'
-      : permissionKeywords.some(keyword => rawMessage.toLowerCase().includes(keyword))
-        ? 'Tài khoản hiện tại chưa có quyền ghi dữ liệu trên Supabase. Hãy cập nhật policy theo email admin trong SUPABASE_SETUP.md, hoặc thêm User Metadata {"role":"admin"} cho tài khoản này rồi đăng nhập lại.'
-      : rawMessage;
     setStatusTone('error');
-    setStatus(friendlyMessage);
+    setStatus(error instanceof Error ? error.message : 'Không thể lưu dữ liệu.');
   };
 
   const handleLocationSubmit = async (event: React.FormEvent) => {
@@ -726,7 +711,7 @@ export function AdminDashboard({
           <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
             <div className="text-sm font-bold text-amber-800">Chưa có dữ liệu nào trong hệ thống</div>
             <p className="mt-1 text-sm text-amber-700">
-              Bấm nút bên dưới để nạp toàn bộ dữ liệu mẫu gồm 10 địa điểm, 23 cung đường và 3 preset vào Supabase một lần.
+              Bấm nút bên dưới để nạp toàn bộ dữ liệu mẫu hiện đang nằm trong code vào bộ nhớ cục bộ của trình duyệt này.
             </p>
             <button
               type="button"
@@ -736,7 +721,7 @@ export function AdminDashboard({
                 setStatus(null);
                 try {
                   await onSeedInitialData();
-                  showSuccess('Đã nạp xong dữ liệu mẫu lên Supabase. Trang cẩm nang đã sẵn sàng để dùng.');
+                  showSuccess('Đã nạp xong dữ liệu mẫu vào hệ thống cục bộ. Trang cẩm nang đã sẵn sàng để dùng.');
                 } catch (error) {
                   showError(error);
                 } finally {

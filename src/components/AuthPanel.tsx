@@ -1,29 +1,12 @@
 import React, { useState } from 'react';
-import { KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { LockKeyhole, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLang } from '../contexts/LanguageContext';
 
 export function AuthPanel() {
-  const { profile, isAuthenticated, isBackendEnabled, loading, signIn, signOut, switchDemoRole } = useAuth();
+  const { profile, isAuthenticated, loading, signOut, switchDemoRole } = useAuth();
   const { t } = useLang();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setMessage(null);
-    setSubmitting(true);
-    try {
-      await signIn(email, password);
-      setPassword('');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : t('Đăng nhập thất bại.', 'Login failed.'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -55,85 +38,39 @@ export function AuthPanel() {
         <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
           <ShieldCheck className="h-4 w-4 text-emerald-600" />
           {t(
-            'Khách xem không cần tài khoản. Chỉ email admin đã cấu hình, hoặc tài khoản có User Metadata ',
-            'Guests need no account. Only a configured admin email, or an account with User Metadata ',
-          )}
-          <code>{'{"role":"admin"}'}</code>
-          {t(
-            ', đăng nhập tại /admin mới dùng để thêm, sửa, xóa dữ liệu.',
-            ', signed in at /admin, can add, edit, or delete data.',
+            'Khách xem không cần tài khoản. Khi cần chỉnh dữ liệu ngay trên máy này, chỉ việc bật quyền admin cục bộ.',
+            'Guests need no account. When you need to edit data on this machine, just enable local admin access.',
           )}
         </div>
       </div>
 
-      {isBackendEnabled ? (
-        <form onSubmit={handleSubmit} className="mt-5 space-y-3">
-          <label className="block">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Email</div>
-            <input
-              value={email}
-              onChange={event => setEmail(event.target.value)}
-              type="email"
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
-              placeholder="admin@school.vn"
-            />
-          </label>
-          <label className="block">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t('Mật khẩu', 'Password')}</div>
-            <input
-              value={password}
-              onChange={event => setPassword(event.target.value)}
-              type="password"
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
-              placeholder="••••••••"
-            />
-          </label>
-          {message && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{message}</div>}
-          <div className="flex gap-3">
-            {!isAuthenticated ? (
-              <button
-                type="submit"
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-full bg-[#14342b] px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
-              >
-                <KeyRound className="h-4 w-4" />
-                {submitting ? t('Đang đăng nhập...', 'Signing in...') : t('Đăng nhập', 'Sign in')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700"
-              >
-                <LockKeyhole className="h-4 w-4" />
-                {t('Đăng xuất', 'Sign out')}
-              </button>
-            )}
-          </div>
-        </form>
-      ) : (
-        <div className="mt-5 space-y-3">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-            {t('Chưa có biến môi trường Supabase. App đang ở chế độ demo để kiểm tra giao diện quản trị.', 'No Supabase environment variables set. App is running in demo mode for UI testing.')}
-          </div>
-          <div className="flex flex-wrap gap-3">
+      <div className="mt-5 space-y-3">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+          {t('Dữ liệu hiện đã được nhúng trực tiếp trong code web. Các lần chỉnh sửa từ trang admin sẽ được lưu cục bộ trên trình duyệt của máy này.', 'The data is now embedded directly in the web code. Edits from the admin page are saved locally in this browser on this machine.')}
+        </div>
+        {message && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{message}</div>}
+        <div className="flex flex-wrap gap-3">
+          {!isAuthenticated ? (
             <button
-              onClick={() => switchDemoRole()}
+              onClick={() => {
+                setMessage(null);
+                switchDemoRole();
+              }}
               className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-bold text-white"
             >
-              {t('Vào vai Admin', 'Switch to Admin')}
+              {t('Bật quyền Admin cục bộ', 'Enable local admin')}
             </button>
-            {isAuthenticated && (
-              <button
-                onClick={() => void signOut()}
-                className="rounded-full border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700"
-              >
-                {t('Thoát demo', 'Exit demo')}
-              </button>
-            )}
-          </div>
+          ) : (
+            <button
+              onClick={() => void signOut()}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700"
+            >
+              <LockKeyhole className="h-4 w-4" />
+              {t('Thoát quyền Admin', 'Exit admin mode')}
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

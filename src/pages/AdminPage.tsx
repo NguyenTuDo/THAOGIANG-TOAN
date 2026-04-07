@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { AdminDashboard } from '../components/AdminDashboard';
 import { useAuth } from '../contexts/AuthContext';
 import { useLang } from '../contexts/LanguageContext';
@@ -18,18 +18,13 @@ import {
 import { AppMode, GraphData, PresetSelection, PresetSelectionMap } from '../types';
 
 export function AdminPage() {
-  const { profile, loading, signIn, signOut, isBackendEnabled, switchDemoRole } = useAuth();
+  const { profile, loading, signOut, switchDemoRole } = useAuth();
   const { t } = useLang();
   const [graphData, setGraphData] = useState<GraphData>(INITIAL_GRAPH_DATA);
   const [presets, setPresets] = useState<PresetSelectionMap>(PRESET_SELECTIONS);
   const [loadingData, setLoadingData] = useState(true);
   // Track whether data has ever loaded so subsequent refreshes don't unmount AdminDashboard
   const [everLoaded, setEverLoaded] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
   const refreshData = useCallback(async () => {
     if (!everLoaded) setLoadingData(true);
     try {
@@ -112,27 +107,6 @@ export function AdminPage() {
     await refreshData();
   }, [refreshData]);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setMessage(null);
-    setSubmitting(true);
-    try {
-      await signIn(email, password);
-      setPassword('');
-    } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : t('Đăng nhập thất bại.', 'Login failed.');
-      const friendlyMessage = rawMessage === 'Invalid login credentials'
-        ? t(
-            'Email hoặc mật khẩu chưa đúng. Hãy dùng đúng tài khoản đã tạo trong Supabase Authentication. Nếu muốn, có thể cho quyền admin bằng email cấu hình hoặc bằng User Metadata {"role":"admin"}.',
-            'Incorrect email or password. Please use the account created in Supabase Authentication. You can grant admin access via a configured email or User Metadata {"role":"admin"}.',
-          )
-        : rawMessage;
-      setMessage(friendlyMessage);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#efe7da] px-4 py-6 md:px-6">
       <div className="mx-auto max-w-[1500px] space-y-6">
@@ -204,62 +178,27 @@ export function AdminPage() {
               <h2 className="mt-2 text-2xl font-black text-slate-900">{t('Đăng nhập để chỉnh dữ liệu', 'Sign in to edit data')}</h2>
               <p className="mt-3 text-sm leading-7 text-slate-600">
                 {t(
-                  'Khách xem không cần tài khoản. Chỉ cần một tài khoản đăng nhập ở đây để vào phần cập nhật điểm đến, tuyến đường và preset.',
-                  'Guests need no account. You only need to sign in here to update destinations, routes, and presets.',
+                  'Khách xem không cần tài khoản. Khi cần chỉnh dữ liệu trên máy này, thầy chỉ việc bật quyền admin cục bộ để vào phần cập nhật điểm đến, tuyến đường và preset.',
+                  'Guests need no account. When you need to edit data on this machine, just enable local admin access to update destinations, routes, and presets.',
                 )}
               </p>
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-                <strong>{t('Cách đơn giản nhất:', 'Easiest way:')}</strong> {t('vào', 'go to')} <code>Authentication &gt; Users</code>, {t('tạo đúng một tài khoản cho thầy.', 'create exactly one account.')}
-                {' '}{t('Nếu email đó nằm trong danh sách admin của app thì đăng nhập dùng luôn được. Nếu không, mở tài khoản đó và thêm', 'If that email is on the app\'s admin list, sign in directly. Otherwise open that account and add')} <code>User Metadata</code> {t('là', 'as')} <code>{'{"role":"admin"}'}</code>, {t('rồi đăng nhập ở', 'then sign in at')} <code>/admin</code>.
+                <strong>{t('Cách dùng hiện tại:', 'Current workflow:')}</strong> {t('dữ liệu gốc đã được chép trực tiếp từ Supabase vào mã nguồn. Từ giờ, mỗi lần cần chỉnh tạm trên máy này thì vào', 'the base data has been copied directly from Supabase into the source code. From now on, whenever you need a local edit on this machine, open')} <code>/admin</code> {t('và bật quyền admin cục bộ.', 'and enable local admin access.')}
               </div>
 
-              {isBackendEnabled ? (
-                <form onSubmit={handleSubmit} className="mt-5 space-y-3">
-                  <label className="block">
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Email</div>
-                    <input
-                      value={email}
-                      onChange={event => setEmail(event.target.value)}
-                      type="email"
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
-                      placeholder="admin@school.vn"
-                    />
-                  </label>
-                  <label className="block">
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t('Mật khẩu', 'Password')}</div>
-                    <input
-                      value={password}
-                      onChange={event => setPassword(event.target.value)}
-                      type="password"
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-400"
-                      placeholder="••••••••"
-                    />
-                  </label>
-                  {message && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{message}</div>}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#14342b] px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
-                  >
-                    <KeyRound className="h-4 w-4" />
-                    {submitting ? t('Đang đăng nhập...', 'Signing in...') : t('Đăng nhập admin', 'Sign in as admin')}
-                  </button>
-                </form>
-              ) : (
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-                    {t('Chưa có biến môi trường Supabase. Trang đang ở chế độ demo để kiểm tra giao diện quản trị.', 'No Supabase environment variables set. Page is in demo mode for admin UI testing.')}
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={() => switchDemoRole()}
-                      className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-bold text-white"
-                    >
-                      {t('Vào vai Admin', 'Switch to Admin')}
-                    </button>
-                  </div>
+              <div className="mt-5 space-y-3">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                  {t('Các chỉnh sửa tại đây được lưu trong trình duyệt của máy này. Nếu muốn biến chúng thành dữ liệu cố định của website, chỉ cần chép lại vào file dữ liệu trong code rồi build lại.', 'Edits here are saved in this browser on this machine. If you want them to become the website’s fixed data, copy them back into the code data file and rebuild.')}
                 </div>
-              )}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => switchDemoRole()}
+                    className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-bold text-white"
+                  >
+                    {t('Bật quyền Admin cục bộ', 'Enable local admin')}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-[30px] border border-[#ded5c7] bg-[linear-gradient(135deg,#17354d,#325f76,#d4a36d)] p-6 text-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
@@ -267,8 +206,8 @@ export function AdminPage() {
               <h2 className="mt-2 text-3xl font-black">{t('Trang chính là cẩm nang, trang này chỉ để biên tập', 'Main page is the guidebook, this page is for editing only')}</h2>
               <div className="mt-4 space-y-3 text-sm leading-7 text-white/82">
                 <p>{t('Khách mở website sẽ vào thẳng phần giới thiệu, chọn điểm tham quan và xem lời giải 3 bài toán.', 'Visitors open the website directly to the introduction, select destinations, and view solutions to 3 problems.')}</p>
-                <p>{t('Tại ', 'At ')}<code>/admin</code>{t(', thầy đăng nhập bằng tài khoản Supabase duy nhất để cập nhật dữ liệu địa điểm, ảnh, bản tiếng Anh và preset thao giảng.', ', sign in with the single Supabase account to update location data, images, English translations, and demo presets.')}</p>
-                <p>{t('Nhờ vậy phần trình bày trước lớp gọn hơn: một luồng cho người xem, một luồng riêng cho biên tập.', 'This keeps the classroom presentation clean: one flow for viewers, a separate flow for editing.')}</p>
+                <p>{t('Tại ', 'At ')}<code>/admin</code>{t(', thầy bật quyền admin cục bộ để cập nhật dữ liệu địa điểm, ảnh, bản tiếng Anh và preset thao giảng ngay trên máy đang dùng.', ', enable local admin access to update location data, images, English translations, and demo presets on the current machine.')}</p>
+                <p>{t('Nhờ vậy phần trình bày trước lớp gọn hơn: dữ liệu gốc nằm trong code web, còn phần biên tập thử nghiệm vẫn tách riêng.', 'This keeps the classroom presentation clean: the base data lives in the web code, while experimental editing stays separate.')}</p>
               </div>
               {profile.role === 'guest' ? null : (
                 <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-white">
